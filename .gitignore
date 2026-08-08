@@ -15,3 +15,5 @@ android/capacitor-cordova-android-plugins/.cxx/
 *.swp
 *.swo
 brain_log.txt
+.freebuff/
+public/study/*.pdf

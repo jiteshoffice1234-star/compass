@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="assets/icon.svg" width="96" alt="CMA Compass icon">
-  <h1>CMA Compass</h1>
+  <img src="assets/icon.svg" width="96" alt="Compass icon">
+  <h1>Compass</h1>
   <p><strong>Crack the CMA exam. One chapter at a time.</strong></p>
   <p>A free, open-source Android app for CMA (Certified Management Accountant) students preparing for ICMAI's Foundation, Intermediate, and Final exams under the 2022 syllabus.</p>
 </div>
@@ -28,14 +28,14 @@ CMA students in India face a fragmented study experience:
 - **No progress tracking** — It's hard to know which chapters are done, which quizzes are passed, and how much you've actually studied.
 - **No unified practice** — Quizzes, flashcards, and PDF summaries live in different apps or websites. There's no single hub.
 
-## What CMA Compass Solves
+## What Compass Solves
 
 | Problem | Solution |
 |---|---|
 | Fragmented video sources | Curated, verified YouTube playlists per paper + specific lecture options per chapter (full lecture, quick revision, worked examples). Every video ID is live-checked. |
 | No structured syllabus | Full Foundation (Papers 1–4), Intermediate (Papers 5–12), and Final (Papers 13–20) syllabus mapped chapter-by-chapter with sections, key points, and XP rewards. |
-| No progress tracking | Built-in progress store (video watched, quiz passed, XP earned, bookmarks). Chapters unlock sequentially. |
-| No unified practice | Each chapter has a 10-question MCQ quiz, a flashcard stack, and linked PDF summaries/practice sheets — all in one screen. |
+| No progress tracking | Built-in progress store (video watched, quiz passed, XP earned, bookmarks). |
+| No unified practice | Each chapter has a 15-question MCQ quiz, a flashcard stack, and linked PDF summaries/practice sheets — all in one screen. |
 | App updates are painful | OTA update system downloads `web-build.zip` from GitHub Releases and extracts it at runtime — no APK reinstall needed. Falls back to APK if OTA fails. |
 | Boring UI | Neobrutalism design — flat colors, 2–3px black borders, hard offset box shadows, JetBrains Mono + Inter. Fun to use. |
 
@@ -57,12 +57,13 @@ CMA students in India face a fragmented study experience:
 - **Search bar** — search chapters, glossary terms, and formulas instantly
 
 ### Chapter System
-- **Sequential unlocking** — chapters unlock as you complete previous ones
+- **Everything unlocked** — all Foundation, Intermediate and Final chapters open from day one
 - **Video lectures** — embedded YouTube player with curated CMA-specific lectures
 - **Overview tab** — key points, XP reward, paper/section info
-- **Quiz tab** — 10-question MCQ quiz (unlocks after watching the lecture)
+- **Quiz tab** — 15-question MCQ quiz, fair 50% pass mark, drawn from a 3,600+ question bank
 - **Flashcards tab** — chapter-wise flashcards with term/definition flip
 - **PDF tab** — in-app PDF reader with Summary, Practice Problems, and Cheat Sheet
+- **Offline study material** — all 23 official ICMAI books (Foundation, Intermediate, Final) bundled inside the app — read every book with zero internet
 
 ### Practice Hub
 - **Flashcards** — spaced repetition drills across all chapters
@@ -74,7 +75,7 @@ CMA students in India face a fragmented study experience:
 - **XP progress bar** — track your level progression (Beginner → Expert)
 - **Day streak** — consecutive study days
 - **Chapters completed** — total chapters done out of all available
-- **12 badges** — First Step, On Fire (7-day streak), Perfectionist (10/10 quiz), CMA Foundation, CMA Final, Speed Run, and more
+- **12 badges** — First Step, On Fire (7-day streak), Perfectionist (perfect quiz), CMA Foundation, CMA Final, Speed Run, and more
 - **Theme switcher** — choose from Neobrutalism, Glassmorphism, Claymorphism, Neumorphism, Skeuomorphism, Vaporwave, and Cyberpunk themes
 
 ### OTA Updates
@@ -187,8 +188,8 @@ CMA students in India face a fragmented study experience:
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/jiteshoffice1234-star/cma-compass.git
-cd cma-compass
+git clone https://github.com/jiteshoffice1234-star/compass.git
+cd compass
 npm install
 ```
 
@@ -230,7 +231,7 @@ npm run build && npx cap sync android
 ## How OTA Updates Work
 
 1. **GitHub Actions** builds the web app and packages `dist/` into `web-build.zip`
-2. Both `cma-compass-vX.X.X.apk` and `web-build.zip` are uploaded as release assets
+2. Both `compass-vX.X.X.apk` and `web-build.zip` are uploaded as release assets
 3. On app launch, `UpdatePopup.tsx` calls the GitHub Releases API to check for a newer version
 4. If found, the user sees an update prompt:
    - **Install OTA** (default) — downloads `web-build.zip`, extracts to `filesDir/ota/{version}/`, writes version to `SharedPreferences`, and reloads the WebView from the new directory
@@ -242,11 +243,11 @@ npm run build && npx cap sync android
 ## Project Structure
 
 ```
-cma-compass/
+compass/
 ├── .github/workflows/
 │   └── build-apk.yml          # CI: build APK + web-build.zip, create release
 ├── android/
-│   └── app/src/main/java/com/accountiq/app/
+│   └── app/src/main/java/com/compass/app/
 │       ├── MainActivity.java   # App entry, OTA dir detection
 │       ├── OtaUpdaterPlugin.java  # Native OTA update plugin
 │       └── ApkUpdaterPlugin.java  # Native APK download/install plugin
@@ -280,13 +281,18 @@ cma-compass/
 │   │   └── levels.ts           # Level management
 │   ├── screens/
 │   │   ├── Onboarding.tsx      # First-run onboarding flow
-│   │   ├── ChapterDetail.tsx   # Chapter screen: video + tabs
+│   │   ├── ChapterDetail.tsx   # Chapter screen: video + tabs (quiz/flashcards/PDF)
 │   │   ├── Chapters.tsx        # Chapter listing screen
 │   │   ├── Home.tsx            # Home dashboard
-│   │   ├── PaperScreen.tsx     # Paper listing with chapters
-│   │   ├── LevelScreen.tsx     # Level selection
+│   │   ├── Practice.tsx        # Practice hub + exam setup
+│   │   ├── Profile.tsx         # Profile, badges, settings, backup
+│   │   ├── PdfTab.tsx          # Chapter PDFs (generated + official ICMAI)
+│   │   ├── PdfViewer.tsx       # In-app PDF reader
+│   │   ├── SearchOverlay.tsx   # Global search
 │   │   ├── StageTestOverlay.tsx # Paper-level mock test overlay
-│   │   └── PdfTab.tsx          # In-app PDF reader
+│   │   ├── FlashcardsDue.tsx   # Due-flashcards drill
+│   │   ├── FormulaSheet.tsx    # Formula reference
+│   │   └── Glossary.tsx        # A–Z glossary
 │   ├── store/
 │   │   └── index.ts            # Zustand store (progress, bookmarks, etc.)
 │   ├── theme.ts                # Design tokens (neobrutalism)
@@ -309,10 +315,10 @@ cma-compass/
 
 Each GitHub Release includes two assets:
 
-- **`cma-compass-vX.X.X.apk`** — Standalone Android APK. Download and install on any Android device (API 24+).
+- **`compass-vX.X.X.apk`** — Standalone Android APK. Download and install on any Android device (API 24+).
 - **`web-build.zip`** — OTA update bundle for in-app updates without reinstalling.
 
-[View all releases →](https://github.com/jiteshoffice1234-star/cma-compass/releases)
+[View all releases →](https://github.com/jiteshoffice1234-star/compass/releases)
 
 ---
 
@@ -324,7 +330,7 @@ This is a personal project. If you have suggestions or find broken video links, 
 
 ## Legal
 
-- **[Privacy Policy](PRIVACY.md)** — CMA Compass does not collect, store, or transmit any personal data. All progress is stored locally on your device.
+- **[Privacy Policy](PRIVACY.md)** — Compass does not collect, store, or transmit any personal data. All progress is stored locally on your device.
 - **[Terms of Service](TERMS.md)** — The App is provided "as is" for self-study purposes. No affiliation with ICMAI.
 - **ICMAI** — The CMA name and syllabus are the property of the Institute of Cost Accountants of India. This app is not affiliated with or endorsed by ICMAI.
 
@@ -344,7 +350,7 @@ Just include the license notice.
 
 ### Copyright & Attribution
 
-**CMA Compass © 2026 Jitesh**
+**Compass © 2026 Jitesh**
 
 **Important Legal Notice:**
 - This app is **NOT affiliated with ICMAI** (Institute of Cost Accountants of India)

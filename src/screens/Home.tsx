@@ -5,6 +5,7 @@ import { useStore } from '../store'
 import { chaptersForLevel, papersForLevel, LEVEL_LABELS } from '../data/curriculum'
 import { ProgressRing, Card, Tappable, Button } from '../components/ui'
 import { SearchOverlay } from './SearchOverlay'
+import { safeJsonParse } from '../lib/helpers'
 import { color, border, shadow, font, APP_NAME } from '../theme'
 
 export function Home() {
@@ -23,7 +24,9 @@ export function Home() {
   const inProgress = useMemo(() => {
     return levelChapters.find((c) => {
       const p = progress[c.id]
-      return p && !p.completed && (p.video_watched || p.quiz_completed || JSON.parse(p.pdfs_read || '[]').length > 0)
+      // Guard against corrupt pdfs_read JSON — never let it crash the dashboard.
+      const pdfsRead = p ? safeJsonParse<string[]>(p.pdfs_read, []) : []
+      return p && !p.completed && (p.video_watched || p.quiz_completed || pdfsRead.length > 0)
     })
   }, [progress, levelChapters])
 

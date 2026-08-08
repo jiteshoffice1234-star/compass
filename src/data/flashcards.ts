@@ -1,6 +1,8 @@
 import { FOUND_FLASHCARDS } from './flashcards_found'
 import { INTER_A_FLASHCARDS } from './flashcards_inter_a'
 import { INTER_B_FLASHCARDS } from './flashcards_inter_b'
+import { GENERATED_FLASHCARDS } from './flashcards_generated'
+import { HANDWRITTEN_FLASHCARDS } from './flashcards_handwritten'
 
 export interface Flashcard {
   id: string
@@ -348,4 +350,6 @@ export const flashcards: Flashcard[] = [
   ...FOUND_FLASHCARDS,
   ...INTER_A_FLASHCARDS,
   ...INTER_B_FLASHCARDS,
+  ...GENERATED_FLASHCARDS,
+  ...HANDWRITTEN_FLASHCARDS,
 ]

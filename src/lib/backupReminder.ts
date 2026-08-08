@@ -17,7 +17,7 @@ export async function maybePromptBackup() {
       notifications: [{
         id: 1,
         title: 'Backup your progress',
-        body: 'Export your CMA Compass progress to keep it safe — go to Profile > Export.',
+        body: 'Export your Compass progress to keep it safe — go to Profile > Export.',
         schedule: { at: new Date(Date.now() + 3600000) },
       }],
     })

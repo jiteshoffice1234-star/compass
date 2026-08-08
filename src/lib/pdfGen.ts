@@ -26,7 +26,7 @@ function header(doc: jsPDF, chapter: any, type: PdfType) {
   doc.setTextColor(255, 255, 255)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(16)
-  doc.text('CMA Compass', 14, 12)
+  doc.text('Compass', 14, 12)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   doc.text(`${TYPE_LABEL[type]} · Chapter ${chapter.id}: ${chapter.title}`, 14, 19)
@@ -39,7 +39,7 @@ function footer(doc: jsPDF) {
     doc.setPage(i)
     doc.setFontSize(8)
     doc.setTextColor(150, 150, 150)
-    doc.text('CMA Compass · Personal study notes · Generated offline', 14, 287)
+    doc.text('Compass · Personal study notes · Generated offline', 14, 287)
   }
 }
 
@@ -144,12 +144,12 @@ export async function generateChapterPdf(chapterId: number, type: PdfType): Prom
 export async function savePdf(chapterId: number, type: PdfType, data: Uint8Array): Promise<string> {
   const fileName = `ch${chapterId}_${type}.pdf`
   if (Capacitor.isNativePlatform()) {
-    await Filesystem.mkdir({ path: 'cmacompass/pdfs', directory: Directory.Documents, recursive: true }).catch(() => {})
+    await Filesystem.mkdir({ path: 'compass/pdfs', directory: Directory.Documents, recursive: true }).catch(() => {})
     const bytes = new Uint8Array(data)
     const binary = Array.from(bytes).map(b => String.fromCharCode(b)).join('')
     const b64 = btoa(binary)
-    await Filesystem.writeFile({ path: 'cmacompass/pdfs/' + fileName, data: b64, directory: Directory.Documents, recursive: true })
-    return (await Filesystem.getUri({ path: 'cmacompass/pdfs/' + fileName, directory: Directory.Documents })).uri
+    await Filesystem.writeFile({ path: 'compass/pdfs/' + fileName, data: b64, directory: Directory.Documents, recursive: true })
+    return (await Filesystem.getUri({ path: 'compass/pdfs/' + fileName, directory: Directory.Documents })).uri
   } else {
     const blob = new Blob([data as any], { type: 'application/pdf' })
     const url = URL.createObjectURL(blob)
@@ -157,19 +157,3 @@ export async function savePdf(chapterId: number, type: PdfType, data: Uint8Array
   }
 }
 
-export async function getPdfUri(chapterId: number, type: PdfType): Promise<string | null> {
-  const fileName = `ch${chapterId}_${type}.pdf`
-  if (Capacitor.isNativePlatform()) {
-    try {
-      const r = await Filesystem.getUri({ path: 'cmacompass/pdfs/' + fileName, directory: Directory.Documents })
-      return r.uri
-    } catch {
-      return null
-    }
-  } else {
-    return null
-  }
-}
-
-export const PDF_TYPES: PdfType[] = ['summary', 'practice', 'cheat']
-export const TOTAL_PDFS = curriculum.length * PDF_TYPES.length

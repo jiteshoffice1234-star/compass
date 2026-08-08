@@ -2,6 +2,8 @@ import { FOUND_QUESTIONS } from './questions_found'
 import { INTER_A_QUESTIONS } from './questions_inter_a'
 import { INTER_B_QUESTIONS } from './questions_inter_b'
 import { FINAL_QUESTIONS } from './questions_final'
+import { GENERATED_QUESTIONS } from './questions_generated'
+import { HANDWRITTEN_QUESTIONS } from './questions_handwritten'
 
 export interface Question {
   id: string
@@ -12,6 +14,8 @@ export interface Question {
 }
 
 export const questions: Question[] = [
+  // hand-written extra questions (quality expansion) come first
+  ...HANDWRITTEN_QUESTIONS,
   // ===== Chapter 1 =====
   { id: 'q1-1', chapterId: 1, question: 'Accounting is best described as the process of:', options: ['Only recording cash transactions', 'Recording, classifying, summarising and interpreting financial transactions', 'Filing income-tax returns', 'Printing invoices for customers'], correctIndex: 1 },
   { id: 'q1-2', chapterId: 1, question: 'Which of the following is NOT one of the three core financial statements?', options: ['Income Statement', 'Balance Sheet', 'Cash Flow Statement', 'Purchase Order'], correctIndex: 3 },
@@ -351,4 +355,5 @@ export const questions: Question[] = [
   ...INTER_A_QUESTIONS,
   ...INTER_B_QUESTIONS,
   ...FINAL_QUESTIONS,
+  ...GENERATED_QUESTIONS,
 ]

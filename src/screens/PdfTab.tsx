@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FileText, BookOpen, Zap, ArrowRight, Loader2, GraduationCap } from 'lucide-react'
+import { FileText, BookOpen, Zap, ArrowRight, Loader2, GraduationCap, WifiOff } from 'lucide-react'
 import { useStore } from '../store'
 import { curriculum } from '../data/curriculum'
-import { studyMaterialForPaper } from '../data/studyMaterial'
+import { studyMaterialForPaper, StudyDoc } from '../data/studyMaterial'
 import { Card } from '../components/ui'
 import { generateChapterPdf, savePdf, PdfType } from '../lib/pdfGen'
+import { safeJsonParse } from '../lib/helpers'
 import { color, border } from '../theme'
 
 const CARDS: { type: PdfType; label: string; desc: string; icon: any; tint: string; iconColor: string }[] = [
@@ -18,7 +19,7 @@ export function PdfTab({ chapterId }: { chapterId: number }) {
   const nav = useNavigate()
   const markPdfRead = useStore((s) => s.markPdfRead)
   const progress = useStore((s) => s.progress[chapterId])
-  const read: string[] = progress ? JSON.parse(progress.pdfs_read || '[]') : []
+  const read: string[] = progress ? safeJsonParse<string[]>(progress.pdfs_read, []) : []
   const [loading, setLoading] = useState<PdfType | null>(null)
 
   const chapter = curriculum.find((c) => c.id === chapterId)
@@ -38,6 +39,16 @@ export function PdfTab({ chapterId }: { chapterId: number }) {
     }
   }
 
+  const openOfficial = async (doc: StudyDoc) => {
+    try {
+      // Bundled docs use a relative path — served from the app's own assets, so
+      // they open instantly offline (no network, no CORS).
+      nav(`/pdf?src=${encodeURIComponent(doc.url)}&title=${encodeURIComponent(doc.title)}`)
+    } catch {
+      useStore.getState().showToast('Could not open study material')
+    }
+  }
+
   return (
     <div>
       {officialDocs.length > 0 && (
@@ -46,16 +57,20 @@ export function PdfTab({ chapterId }: { chapterId: number }) {
             <GraduationCap size={18} color={color.secondary} /> Official ICMAI Study Material
           </div>
           <div style={{ color: color.muted, fontSize: 13, marginBottom: 12, fontWeight: 600 }}>
-            Syllabus 2022 · opens in in-app PDF reader
+            Syllabus 2022 · Bundled in the app — works fully offline
           </div>
           {officialDocs.map((doc, i) => (
             <Card key={i} style={{ padding: 14, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 14 }}
-              onClick={() => nav(`/pdf?src=${encodeURIComponent(doc.url)}&title=${encodeURIComponent(doc.title)}`)}>
-              <div style={{ width: 44, height: 44, borderRadius: 8, border: border.thin, background: color.warningTint, display: 'flex', alignItems: 'center', justifyContent: 'center', color: color.warning }}>
-                <GraduationCap size={20} />
+              onClick={() => openOfficial(doc)}>
+              <div style={{ width: 44, height: 44, borderRadius: 8, border: border.thin, background: color.warningTint, display: 'flex', alignItems: 'center', justifyContent: 'center', color: color.warning, flexShrink: 0 }}>
+                <WifiOff size={20} />
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 800, fontSize: 14 }}>{doc.title}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  {doc.title}
+                  <span style={{ fontSize: 11, color: color.success, fontWeight: 800, whiteSpace: 'nowrap' }}>✓ offline</span>
+                </div>
+                <div style={{ color: color.muted, fontSize: 12, fontWeight: 600, marginTop: 2 }}>Opens instantly from your device</div>
               </div>
               <ArrowRight size={18} color={color.secondary} />
             </Card>

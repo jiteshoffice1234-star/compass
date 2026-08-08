@@ -21,7 +21,7 @@ import { color } from './theme'
 import { OfflineBanner } from './components/OfflineBanner'
 
 function AppContent() {
-  const { ready, onboardingComplete, init, levelUp, badgeUnlock, toast, clearToast } = useStore()
+  const { ready, onboardingComplete, init, levelUp, badgeUnlock, toast, clearToast, uiMode } = useStore()
   const [updateInfo, setUpdateInfo] = useState<{ version: string; url: string; webBuildUrl?: string | null; notes: string; ota: boolean } | null>(null)
 
   useEffect(() => {
@@ -30,7 +30,8 @@ function AppContent() {
 
   useEffect(() => {
     if (!ready) return
-    if (isNative) setStatusBarColor('light')
+    // Keep the Android status bar in sync with the active theme.
+    if (isNative) setStatusBarColor(uiMode)
     // Weekly backup reminder (native only)
     if (isNative) {
       import('./lib/backupReminder').then((m) => m.maybePromptBackup())
@@ -48,7 +49,7 @@ function AppContent() {
       }
     }, 5000)
     return () => clearTimeout(t)
-  }, [ready])
+  }, [ready, uiMode])
 
   if (!ready) {
     return <LoaderScreen />

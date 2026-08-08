@@ -4,7 +4,7 @@ import { X, Check, X as XIcon, ArrowRight, Trophy } from 'lucide-react'
 import { useStore } from '../store'
 import { questions } from '../data/questions'
 import { paperById, chaptersForPaper, chaptersForLevel, Level } from '../data/curriculum'
-import { useQuizSession } from '../hooks/useQuizSession'
+import { useQuizSession, passMarkFor } from '../hooks/useQuizSession'
 import { Tappable, Button, IconButton } from '../components/ui'
 import { Confetti } from '../components/Confetti'
 import { impactLight } from '../lib/haptics'
@@ -41,7 +41,7 @@ export function StageTestOverlay({ paperId, grand, level, onClose }: { paperId: 
   }, [finished])
 
   const { score, passed } = finished ? getResults() : { score: 0, passed: false }
-  const passMark = Math.ceil(qTotal * 0.6)
+  const passMark = passMarkFor(qTotal)
   const title = grand ? 'Grand Final' : `${paperById(paperId)?.code ?? 'Paper'} Test`
 
   return (

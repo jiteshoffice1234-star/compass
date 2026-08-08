@@ -1,14 +1,16 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.accountiq.app"
+    namespace "com.compass.app"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.accountiq.app"
+        // applicationId must match capacitor.config.ts appId (npx cap sync
+        // regenerates this from the config, so keep both in sync manually).
+        applicationId "com.compass.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 9
-        versionName "2.5.2"
+        versionCode 1
+        versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

@@ -1,6 +1,6 @@
 import {
   getProfile, saveProfile, getAllChapterProgress, saveChapterProgress,
-  getBadges, unlockBadge, getStreak, saveStreak, getBookmarks,
+  getBadges, unlockBadge, getStreak, saveStreak, getBookmarks, toggleBookmark,
 } from './store'
 import type { ChapterProgressRow, UserProfileRow, BadgeRow } from './db'
 import type { StreakRow } from './store'
@@ -100,9 +100,21 @@ export async function importProgressFromJson(jsonString: string): Promise<{ succ
       await saveStreak(backup.data.streak)
     }
 
+    // Import bookmarks (were exported but previously never restored).
+    // Use set semantics (add missing ids only) — toggling would un-bookmark
+    // chapters the user already bookmarked on this device.
+    if (Array.isArray(backup.data.bookmarks)) {
+      const existing = await getBookmarks()
+      for (const id of backup.data.bookmarks) {
+        if (typeof id === 'number' && id > 0 && !existing.includes(id)) {
+          await toggleBookmark(id)
+        }
+      }
+    }
+
     return {
       success: true,
-      message: `✓ Restored ${backup.data.chapters.length} chapters, ${backup.data.badges?.length || 0} badges`,
+      message: `✓ Restored ${backup.data.chapters.length} chapters, ${backup.data.badges?.length || 0} badges, ${backup.data.bookmarks?.length || 0} bookmarks`,
     }
   } catch (e) {
     return {

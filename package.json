@@ -1,8 +1,8 @@
 {
-  "name": "cma-compass",
+  "name": "compass",
   "private": false,
   "license": "MIT",
-  "version": "2.5.2",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -20,13 +20,18 @@
     "@capacitor/local-notifications": "^6.0.0",
     "@capacitor/status-bar": "^6.0.0",
     "framer-motion": "^11.0.0",
-    "jspdf": "^2.5.1",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.400.0",
     "pdfjs-dist": "^4.4.168",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.24.0",
+    "react-router-dom": "^7.18.2",
     "zustand": "^5.0.0"
+  },
+  "overrides": {
+    "@mapbox/node-pre-gyp": {
+      "tar": "7.5.22"
+    }
   },
   "devDependencies": {
     "@capacitor/cli": "^6.0.0",

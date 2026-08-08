@@ -1,7 +1,8 @@
-package com.accountiq.app;
+package com.compass.app;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.Log;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -65,7 +66,15 @@ public class OtaUpdaterPlugin extends Plugin {
                     ZipEntry entry;
                     byte[] buffer = new byte[8192];
                     while ((entry = zis.getNextEntry()) != null) {
-                        File targetFile = new File(otaDir, entry.getName());
+                        String entryName = entry.getName();
+                        // Zip-slip protection: reject entries that could escape
+                        // the OTA directory (e.g. "../evil", absolute paths).
+                        if (!isSafeEntryName(entryName)) {
+                            Log.w(TAG, "Skipping unsafe zip entry: " + entryName);
+                            zis.closeEntry();
+                            continue;
+                        }
+                        File targetFile = new File(otaDir, entryName);
                         if (entry.isDirectory()) {
                             targetFile.mkdirs();
                         } else {
@@ -150,6 +159,22 @@ public class OtaUpdaterPlugin extends Plugin {
         SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         prefs.edit().remove(KEY_ACTIVE_VERSION).remove(KEY_DOWNLOADED_VERSION).apply();
         call.resolve(new JSObject() {{ put("success", true); }});
+    }
+
+    private static final String TAG = "OtaUpdater";
+
+    /** Ensure a zip entry name cannot traverse outside the extraction root. */
+    private static boolean isSafeEntryName(String name) {
+        if (name == null || name.isEmpty()) return false;
+        File f = new File(name);
+        File parent = f.getParentFile();
+        while (parent != null) {
+            if (parent.getName().equals("..")) return false;
+            parent = parent.getParentFile();
+        }
+        return !name.contains("\\")
+            && !f.isAbsolute()
+            && !name.matches("^[a-zA-Z]:.*");
     }
 
     private void deleteDir(File dir) {

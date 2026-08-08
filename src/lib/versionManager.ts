@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core'
 import { APP_VERSION } from './updateChecker'
+import { getActiveOtaVersion } from './otaUpdater'
 
 export interface VersionInfo {
   apk_version: string
@@ -14,16 +15,10 @@ export async function getVersionInfo(): Promise<VersionInfo> {
   let otaVersion: string | null = null
 
   if (Capacitor.isNativePlatform()) {
-    try {
-      const prefs = localStorage.getItem('ota_prefs')
-      if (prefs) {
-        const otas = JSON.parse(prefs)
-        otaVersion = otas.active_version || null
-        runningVersion = otaVersion ? 'ota' : 'apk'
-      }
-    } catch {
-      // ignore parse errors
-    }
+    // The native OtaUpdater plugin owns the active-version state (SharedPreferences);
+    // localStorage was never written by it, so query the plugin directly.
+    otaVersion = await getActiveOtaVersion()
+    runningVersion = otaVersion ? 'ota' : 'apk'
   }
 
   return {
@@ -31,12 +26,5 @@ export async function getVersionInfo(): Promise<VersionInfo> {
     ota_version: otaVersion,
     running_version: runningVersion,
     app_build: `${apkVersion}${otaVersion ? ` (OTA: ${otaVersion})` : ''}`,
-  }
-}
-
-export async function logVersionMismatch() {
-  const info = await getVersionInfo()
-  if (info.ota_version) {
-    console.info('[Version] Running OTA update:', info)
   }
 }

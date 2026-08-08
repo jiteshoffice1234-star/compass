@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import App from './App'
 import './index.css'
 import { setStatusBarColor, isNative } from './lib/capacitor'
+import { DEFAULT_THEME } from './lib/themes'
 
 if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
   const noop = () => {}
@@ -21,5 +22,5 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
 if (isNative) {
   // status bar is updated on theme change in components
-  setStatusBarColor('dark').catch(() => {})
+  setStatusBarColor(DEFAULT_THEME).catch(() => {})
 }

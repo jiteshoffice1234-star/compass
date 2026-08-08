@@ -1,4 +1,4 @@
-package com.accountiq.app;
+package com.compass.app;
 
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
@@ -39,7 +39,7 @@ public class ApkUpdaterPlugin extends Plugin {
 
         Uri uri = Uri.parse(url);
         DownloadManager.Request request = new DownloadManager.Request(uri);
-        request.setTitle("CMA Compass Update");
+        request.setTitle("Compass Update");
         request.setDescription("Downloading update...");
         request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
         request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "CMACompass-" + System.currentTimeMillis() + ".apk");

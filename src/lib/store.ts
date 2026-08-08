@@ -185,6 +185,24 @@ export async function getTotalXp(): Promise<number> {
   }
 }
 
+// True when the Grand Final reward has already been claimed (persists across
+// restarts — the guard must not rely on in-memory state or users could farm
+// +200 XP by re-running the Grand Final after relaunching).
+export async function hasClaimedGrandFinal(): Promise<boolean> {
+  if (!isNative) {
+    const txns = lsGet<XpTransaction[]>('xp', [])
+    return txns.some((t) => t.reason === 'grand_final')
+  }
+  try {
+    const db = getDb()
+    const r = await db.query("SELECT 1 FROM xp_transactions WHERE reason = 'grand_final' LIMIT 1")
+    return !!r.values && r.values.length > 0
+  } catch (error) {
+    logDatabaseError({ operation: 'hasClaimedGrandFinal', severity: 'WARNING', message: String(error) })
+    return false
+  }
+}
+
 export async function getXpTodayCount(): Promise<number> {
   if (!isNative) {
     const txns = lsGet<XpTransaction[]>('xp', [])
@@ -392,6 +410,33 @@ export async function saveWeeklyChallenge(w: WeeklyChallengeRow): Promise<void> 
     }
   } catch (error) {
     logDatabaseError({ operation: 'saveWeeklyChallenge', severity: 'WARNING', message: String(error) })
+  }
+}
+
+// ---------- Full reset (used by Profile → Reset progress) ----------
+// Wipes every activity table so XP/badges/attempts do not resurrect after a
+// reset. Chapter progress rows themselves are re-created (zeroed) by the store.
+export async function resetAllData(): Promise<void> {
+  if (!isNative) {
+    localStorage.removeItem(LS_PREFIX + 'xp')
+    localStorage.removeItem(LS_PREFIX + 'badges')
+    localStorage.removeItem(LS_PREFIX + 'bookmarks')
+    localStorage.removeItem(LS_PREFIX + 'attempts')
+    localStorage.removeItem(LS_PREFIX + 'fc')
+    localStorage.removeItem(LS_PREFIX + 'weekly')
+    localStorage.removeItem(LS_PREFIX + 'streak')
+    return
+  }
+  try {
+    const db = getDb()
+    await db.run('DELETE FROM xp_transactions')
+    await db.run('DELETE FROM quiz_attempts')
+    await db.run('DELETE FROM flashcard_progress')
+    await db.run('DELETE FROM bookmarks')
+    await db.run('DELETE FROM weekly_challenge')
+    await db.run('DELETE FROM badges')
+  } catch (error) {
+    logDatabaseError({ operation: 'resetAllData', severity: 'ERROR', message: String(error) })
   }
 }
 

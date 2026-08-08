@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.cmacompass.app',
-  appName: 'CMA Compass',
+  appId: 'com.compass.app',
+  appName: 'Compass',
   webDir: 'dist',
   backgroundColor: '#FBFBF9',
   android: {

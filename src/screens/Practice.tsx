@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CreditCard, Layers, Calculator, BookA, Lock, ArrowRight, Play, Settings2 } from 'lucide-react'
+import { CreditCard, Layers, Calculator, BookA, ArrowRight, Play, Settings2 } from 'lucide-react'
 import { useStore } from '../store'
 import { chaptersForLevel, papersForLevel } from '../data/curriculum'
 import { Card, Tappable, Button } from '../components/ui'
@@ -26,11 +26,9 @@ export function Practice() {
   const [setupTimed, setSetupTimed] = useState<boolean>(true)
   const [setupMinutes, setSetupMinutes] = useState<number>(120)
 
-  const progress = useStore((s) => s.progress)
   const level = useStore((s) => s.level)
   const papers = papersForLevel(level).filter((p) => chaptersForLevel(level).some((c) => c.paperId === p.id))
   const setupTerm = EXAM_TERMS.find((t) => t.id === setupTermId) ?? EXAM_TERMS[0]
-  const allDone = chaptersForLevel(level).every((c) => progress[c.id]?.completed)
 
   const tiles = [
     { key: 'flashcards' as const, icon: CreditCard, tint: color.secondaryTint, iconColor: color.secondary, title: 'Flashcards', desc: 'Spaced repetition drills' },
@@ -212,11 +210,10 @@ export function Practice() {
               <ArrowRight size={18} color={color.secondary} />
             </Tappable>
           ))}
-          <Tappable disabled={!allDone} onClick={() => { if (allDone) { setSheet('none'); setActiveTest({ paperId: 0, grand: true }) } }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: allDone ? color.primary : color.card, border: border.thick, borderRadius: 10, boxShadow: allDone ? shadow.md : 'none', padding: 16, opacity: allDone ? 1 : 0.55 }}>
+          <Tappable onClick={() => { setSheet('none'); setActiveTest({ paperId: 0, grand: true }) }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: color.primary, border: border.thick, borderRadius: 10, boxShadow: shadow.md, padding: 16 }}>
             <span style={{ fontWeight: 800, fontSize: 15, color: color.text }}>Grand Final Test (50 Q)</span>
-            {allDone ? <ArrowRight size={18} color={color.text} /> : <Lock size={18} color={color.muted} />}
+            <ArrowRight size={18} color={color.text} />
           </Tappable>
-          {!allDone && <div style={{ color: color.muted, fontSize: 12, textAlign: 'center', marginTop: 2, fontWeight: 600 }}>Complete all chapters in your level to unlock.</div>}
         </div>
       </BottomSheet>
 

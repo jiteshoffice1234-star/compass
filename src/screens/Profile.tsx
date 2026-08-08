@@ -38,7 +38,7 @@ export function Profile() {
     try {
       const json = await exportProgressToJson()
       const date = new Date().toISOString().split('T')[0]
-      downloadJson(json, `cma-compass-backup-${date}.json`)
+      downloadJson(json, `compass-backup-${date}.json`)
       showToast('📥 Backup downloaded')
     } catch {
       showToast('❌ Export failed')

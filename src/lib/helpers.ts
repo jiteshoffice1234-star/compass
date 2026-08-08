@@ -40,3 +40,39 @@ export function checkRateLimit(key: string, minIntervalMs: number): boolean {
 export function isProduction(): boolean {
   return typeof process !== 'undefined' && process.env?.NODE_ENV === 'production'
 }
+
+// Parse "1.2.3" (optionally with a leading v) into comparable numbers.
+// Prerelease suffixes like "-beta" are stripped first. NOTE: do not split on
+// '.' inside a character class here — that would collapse the version to its
+// major part and silently break update comparisons.
+export function parseVersion(v: string): number[] {
+  return String(v || '')
+    .replace(/^v/i, '')
+    .split('-')[0]
+    .split('.')
+    .map((n) => parseInt(n, 10) || 0)
+}
+
+/** Returns 1 if a > b, -1 if a < b, 0 if equal. */
+export function compareVersions(a: string, b: string): number {
+  const pa = parseVersion(a)
+  const pb = parseVersion(b)
+  const len = Math.max(pa.length, pb.length)
+  for (let i = 0; i < len; i++) {
+    const x = pa[i] ?? 0
+    const y = pb[i] ?? 0
+    if (x > y) return 1
+    if (x < y) return -1
+  }
+  return 0
+}
+
+/** Parse JSON safely — returns fallback instead of throwing. */
+export function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}

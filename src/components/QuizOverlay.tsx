@@ -1,28 +1,34 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Check, X as XIcon, Star, ArrowRight } from 'lucide-react'
 import { useStore } from '../store'
 import { questions as allQuestions } from '../data/questions'
-import { useQuizSession } from '../hooks/useQuizSession'
+import { useQuizSession, QUIZ_LENGTH, QUIZ_XP, PERFECT_BONUS_XP, passMarkFor } from '../hooks/useQuizSession'
 import { Tappable, Button, IconButton } from '../components/ui'
 import { Confetti } from '../components/Confetti'
 import { impactLight, notificationSuccess } from '../lib/haptics'
 import { color, border, shadow, font } from '../theme'
 
 export function QuizOverlay({ chapterId, onClose }: { chapterId: number; onClose: () => void }) {
-  const chapterQuestions = allQuestions.filter((q) => q.chapterId === chapterId)
+  // CRITICAL: memoize the pool. Without this, a fresh array is created on every
+  // render and useQuizSession would re-shuffle the deck after each tap — making
+  // the question and its options change right after you click (the reported bug).
+  const chapterQuestions = useMemo(
+    () => allQuestions.filter((q) => q.chapterId === chapterId),
+    [chapterId],
+  )
+  const quizLength = Math.min(QUIZ_LENGTH, Math.max(chapterQuestions.length, 1))
   const { current, idx, selected, answered, finished, total, choose, next, getResults, restart } =
-    useQuizSession(chapterQuestions, chapterQuestions.length)
+    useQuizSession(chapterQuestions, quizLength)
   const completeQuiz = useStore((s) => s.completeQuiz)
-  const isUnlocked = useStore((s) => s.isUnlocked)
   const [confetti, setConfetti] = useState(false)
 
   useEffect(() => {
     if (finished) {
-      const { score, perfect, attempts } = getResults()
+      const { score, passed, perfect, attempts } = getResults()
       completeQuiz(chapterId, score, total, perfect, attempts)
       if (perfect) notificationSuccess()
-      if (score >= 6 && isUnlocked(chapterId + 1) === false) {
+      if (passed) {
         setConfetti(true)
       }
     }
@@ -107,7 +113,7 @@ export function QuizOverlay({ chapterId, onClose }: { chapterId: number; onClose
             </div>
             <div style={{ fontWeight: 900, fontSize: 21, marginTop: 16 }}>{passed ? (perfect ? 'Perfect!' : 'Passed!') : 'Almost there'}</div>
             <div style={{ color: color.muted, fontSize: 14, marginTop: 6, fontWeight: 600 }}>
-              {passed ? `+${20 + (perfect ? 15 : 0)} XP earned` : `You need ${Math.ceil(total * 0.6)}/${total} to pass and unlock the next chapter.`}
+              {passed ? `+${QUIZ_XP + (perfect ? PERFECT_BONUS_XP : 0)} XP earned` : `You need ${passMarkFor(total)}/${total} to pass.`}
             </div>
             <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
               <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>Close</Button>

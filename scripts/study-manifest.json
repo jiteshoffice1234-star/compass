@@ -1,0 +1,28 @@
+{
+  "note": "Official ICMAI CMA Syllabus-2022 study books, mirrored from the institute CDN. download-study-material.cjs fetches each url into public/study/<file>. These files are gitignored and re-downloaded by CI so the repo stays lean.",
+  "docs": [
+    { "file": "Paper1_07042026.pdf", "title": "Official Study Material — Business Laws & Communication", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Paper1_07042026.pdf" },
+    { "file": "Paper2_07042026.pdf", "title": "Official Study Material — Financial & Cost Accounting", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Paper2_07042026.pdf" },
+    { "file": "Paper3_07042026.pdf", "title": "Official Study Material — Business Maths & Statistics", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Paper3_07042026.pdf" },
+    { "file": "Paper4_07042026.pdf", "title": "Official Study Material — Business Economics & Management", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Paper4_07042026.pdf" },
+    { "file": "P5_0904_2026.pdf", "title": "Official Study Material — Business Laws & Ethics", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/P5_0904_2026.pdf" },
+    { "file": "P6_0904_2026.pdf", "title": "Official Study Material — Financial Accounting", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/P6_0904_2026.pdf" },
+    { "file": "P7A_0904_2026.pdf", "title": "Official Study Material — Direct Taxation (Section A)", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/P7A_0904_2026.pdf" },
+    { "file": "P7B_0904_2026.pdf", "title": "Official Study Material — Indirect Taxation (Section B)", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/P7B_0904_2026.pdf" },
+    { "file": "P8_0904_2026.pdf", "title": "Official Study Material — Cost Accounting", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/P8_0904_2026.pdf" },
+    { "file": "P9_0904_2026.pdf", "title": "Official Study Material — Operations & Strategic Management", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/P9_0904_2026.pdf" },
+    { "file": "P10_0904_2026.pdf", "title": "Official Study Material — Corporate Accounting & Auditing", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/P10_0904_2026.pdf" },
+    { "file": "P11_0904_2026.pdf", "title": "Official Study Material — Financial Management & Data Analytics", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/P11_0904_2026.pdf" },
+    { "file": "P12_0904_2026.pdf", "title": "Official Study Material — Management Accounting", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/P12_0904_2026.pdf" },
+    { "file": "P13_new.pdf", "title": "Official Study Material — Corporate & Economic Laws", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Syllabus2022/Final_Stdy_Mtrl/P13_new.pdf" },
+    { "file": "P14.pdf", "title": "Official Study Material — Strategic Financial Management", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Syllabus2022/Final_Stdy_Mtrl/P14.pdf" },
+    { "file": "P15_Mar_26.pdf", "title": "Official Study Material — Direct Tax Laws & International Taxation", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Syllabus2022/Final_Stdy_Mtrl/P15_Mar_26.pdf" },
+    { "file": "Paper16_05.05.25_CP.pdf", "title": "Official Study Material — Strategic Cost Management", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Syllabus2022/Final_Stdy_Mtrl/Paper16_05.05.25_CP.pdf" },
+    { "file": "Paper17_Syll-2022_Rev_new.pdf", "title": "Official Study Material — Cost & Management Audit", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Syllabus2022/Final_Stdy_Mtrl/Paper17_Syll-2022_Rev_new.pdf" },
+    { "file": "P18_new.pdf", "title": "Official Study Material — Corporate Financial Reporting", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Syllabus2022/Final_Stdy_Mtrl/P18_new.pdf" },
+    { "file": "Paper19_Mar2026.pdf", "title": "Official Study Material — Indirect Tax Laws & Practice", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Syllabus2022/Final_Stdy_Mtrl/Paper19_Mar2026.pdf" },
+    { "file": "P20A_new.pdf", "title": "Official Study Material — Strategic Performance Mgmt & Business Valuation (20A)", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Syllabus2022/Final_Stdy_Mtrl/P20A_new.pdf" },
+    { "file": "P20B.pdf", "title": "Elective — Risk Management in Banking & Insurance (20B)", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Syllabus2022/Final_Stdy_Mtrl/P20B.pdf" },
+    { "file": "P20C_new.pdf", "title": "Elective — Entrepreneurship & Start Up (20C)", "url": "https://dwpivt501gtb6.cloudfront.net/upload/students/Syllabus2022/Final_Stdy_Mtrl/P20C_new.pdf" }
+  ]
+}

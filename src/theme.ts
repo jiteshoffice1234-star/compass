@@ -87,4 +87,4 @@ export const nb = {
   },
 } as const
 
-export const APP_NAME = 'CMA Compass'
+export const APP_NAME = 'Compass'

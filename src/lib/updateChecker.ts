@@ -1,8 +1,8 @@
 // GitHub repo that hosts releases (APK + web-build.zip).
-export const REPO = 'jiteshoffice1234-star/cma-compass'
+export const REPO = 'jiteshoffice1234-star/compass'
 
 // Injected at build time from package.json via vite define.
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.5.2'
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0'
 
 export interface UpdateInfo {
   available: boolean
@@ -12,7 +12,7 @@ export interface UpdateInfo {
   releaseNotes: string
 }
 
-import { withTimeout } from './helpers'
+import { withTimeout, compareVersions } from './helpers'
 
 // GitHub token for authenticated API calls (avoids 60 req/hr rate limit).
 // Set via VITE_GITHUB_TOKEN env var or localStorage for development.
@@ -31,8 +31,11 @@ export async function checkForUpdate(currentVersion: string): Promise<UpdateInfo
     const res = await withTimeout(fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers }), 8000)
     if (!res.ok) return null
     const data = await res.json()
-    const latest = data.tag_name.replace(/^v/, '')
-    if (latest === currentVersion) return null
+    const latest = String(data.tag_name || '').replace(/^v/, '')
+    // Only offer an update when the released version is genuinely NEWER than
+    // the running build. Never prompt a downgrade (e.g. unreleased local
+    // builds whose version is ahead of the latest tag).
+    if (!latest || compareVersions(latest, currentVersion) <= 0) return null
     const apk = data.assets?.find((a: any) => a.name.endsWith('.apk'))
     const webZip = data.assets?.find((a: any) => a.name.endsWith('.zip'))
     return {

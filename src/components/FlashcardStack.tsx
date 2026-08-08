@@ -11,6 +11,8 @@ export function FlashcardStack({ chapterId }: { chapterId: number }) {
   const reviewFlashcard = useStore((s) => s.reviewFlashcard)
   const [order, setOrder] = useState(() => cards.map((_, i) => i))
   const [flipped, setFlipped] = useState(false)
+  const total = cards.length
+  const reviewed = total - order.length
 
   const current = cards[order[0]]
 
@@ -21,19 +23,28 @@ export function FlashcardStack({ chapterId }: { chapterId: number }) {
     setFlipped(false)
   }
 
+  const restart = () => {
+    setOrder(cards.map((_, i) => i))
+    setFlipped(false)
+  }
+
   if (!current) {
     return (
       <div style={{ textAlign: 'center', padding: 40, color: color.muted }}>
         <div style={{ fontSize: 15, fontWeight: 800, color: color.text }}>All caught up</div>
         <div style={{ fontSize: 13, marginTop: 6 }}>You have reviewed every flashcard in this chapter.</div>
+        <Tappable onClick={restart} style={{ marginTop: 16, background: color.primary, color: color.primaryInk, border: border.thick, boxShadow: shadow.md, borderRadius: 10, padding: '12px 22px', fontWeight: 800 }}>Review again</Tappable>
       </div>
     )
   }
 
   return (
     <div>
-      <div className="mono" style={{ color: color.muted, fontSize: 12, fontWeight: 700, marginBottom: 12 }}>
-        {order.length} CARD{order.length > 1 ? 'S' : ''} REMAINING
+      <div className="mono" style={{ color: color.muted, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
+        {order.length} LEFT · {reviewed} DONE
+      </div>
+      <div style={{ height: 8, background: color.card, border: border.thin, borderRadius: 5, overflow: 'hidden', marginBottom: 12 }}>
+        <div style={{ height: '100%', width: `${total ? (reviewed / total) * 100 : 0}%`, background: color.secondary, transition: 'width 0.25s' }} />
       </div>
       <Tappable onClick={() => setFlipped((f) => !f)} style={{ width: '100%' }}>
         <motion.div

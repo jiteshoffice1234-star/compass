@@ -1,4 +1,4 @@
-package com.accountiq.app;
+package com.compass.app;
 
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -8,15 +8,9 @@ import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
 
 import java.io.File;
-import java.util.Arrays;
 
 public class MainActivity extends BridgeActivity {
-    private static final String TAG = "CMACompass";
-    private static final String[] CRITICAL_FILES = {
-        "index.html",
-        "assets/index.js",
-        "assets/index.css"
-    };
+    private static final String TAG = "Compass";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -25,17 +19,35 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
     }
 
-    /** Validate that all critical OTA bundle files exist and are non-empty. */
+    /**
+     * Validate that an OTA bundle is usable. Vite emits content-hashed asset
+     * names (e.g. assets/index-XXXX.js), so we check index.html plus the
+     * presence of at least one non-empty JS bundle under assets/ rather than
+     * hard-coding a filename that never exists.
+     */
     private boolean validateOtaBundle(File otaDir) {
-        return Arrays.stream(CRITICAL_FILES).allMatch(relPath -> {
-            File f = new File(otaDir, relPath);
-            boolean valid = f.exists() && f.length() > 0;
-            if (!valid) {
-                Log.w(TAG, "OTA bundle missing or empty: " + f.getAbsolutePath()
-                    + " (exists=" + f.exists() + ", size=" + f.length() + ")");
+        File indexHtml = new File(otaDir, "index.html");
+        if (!indexHtml.exists() || indexHtml.length() == 0) {
+            Log.w(TAG, "OTA bundle missing index.html: " + indexHtml.getAbsolutePath());
+            return false;
+        }
+        File assetsDir = new File(otaDir, "assets");
+        if (!assetsDir.isDirectory()) {
+            Log.w(TAG, "OTA bundle missing assets dir: " + otaDir.getAbsolutePath());
+            return false;
+        }
+        File[] jsFiles = assetsDir.listFiles((dir, name) -> name.endsWith(".js"));
+        boolean hasNonEmptyJs = false;
+        if (jsFiles != null) {
+            for (File f : jsFiles) {
+                if (f.length() > 0) { hasNonEmptyJs = true; break; }
             }
-            return valid;
-        });
+        }
+        if (!hasNonEmptyJs) {
+            Log.w(TAG, "OTA bundle has no non-empty JS bundles in assets: " + assetsDir.getAbsolutePath());
+            return false;
+        }
+        return true;
     }
 
     @Override
