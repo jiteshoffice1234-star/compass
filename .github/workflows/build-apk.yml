@@ -23,7 +23,13 @@ jobs:
 
       - name: Download bundled study material (official ICMAI books)
         run: |
-          node scripts/download-study-material.cjs
+          # The books ship in the repo (the ICMAI CDN blocks GitHub runner IPs
+          # with HTTP 403). Only fetch fresh copies when they are absent.
+          if [ ! -f public/study/Paper1_07042026.pdf ]; then
+            node scripts/download-study-material.cjs
+          else
+            echo "Study material already bundled in the repo — skipping download."
+          fi
 
       - name: Build web app
         run: npm run build
