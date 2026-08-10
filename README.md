@@ -60,6 +60,7 @@ CMA students in India face a fragmented study experience:
 
 ### Chapter System
 - **Everything unlocked** — all Foundation, Intermediate and Final chapters open from day one
+- **Mastery at every level (V2.1)** — the Chapters screen shows per-paper mastery cards (with 🟢🟡🔴 chapter counts), a level/paper summary strip (mastery, accuracy, flashcard mastery, strong/needs-revision/weak), a status badge on every chapter, and a **Weakest first** sort that ranks started-but-weak chapters on top
 - **Video lectures** — embedded YouTube player with curated CMA-specific lectures
 - **Overview tab** — key points, XP reward, paper/section info
 - **Quiz tab (V2)** — 15-question MCQ quiz with a fair 50% pass mark, plus **Full Chapter Test**, **Weak Questions**, **Previous Mistakes** and **Timed (30s/question)** modes, difficulty filtering (Easy/Medium/Hard derived from *your* accuracy), instant explanation + correct answer after every question, and a **Retry Wrong Questions** button on results. Questions never lose XP and the order never shuffles mid-quiz.
@@ -69,15 +70,18 @@ CMA students in India face a fragmented study experience:
 - **Offline study material** — all 23 official ICMAI books (Foundation, Intermediate, Final) bundled inside the app — read every book with zero internet
 
 ### Practice Hub
+- **Mastery Map (V2.1)** — per-paper mastery bars plus your top **Weakest Areas** (lowest mastery first) and **Strongest Areas**, each tappable straight into the chapter
 - **Smart Quiz (V2)** — the engine builds your session from real performance: weak questions, previous mistakes, timed or mixed practice, with optional difficulty focus
 - **Revision hub (V2)** — due-for-revision flashcards, difficult cards, weak topics, wrong questions and recently completed chapters, each with a one-tap start action
 - **Flashcards (V2)** — spaced repetition with Due Today / Weak / Difficult / Recently Learned / All filter decks
 - **Paper Tests** — 20 mixed questions from a paper, Grand Final with 50 questions
 
-### Mastery Engine (V2)
+### Mastery Engine (V2.1)
 - Tracks every question's correct/wrong rolls and streaks locally and derives per-question difficulty and weakness
 - SM-2-style flashcard scheduling (ease, interval, lapses, streak) fully stored on-device
-- Chapter/level mastery, weak & strong areas and revision priority computed from real stored performance — no fake recommendations
+- Mastery flows **Question → Chapter → Paper → Level**: accuracy is difficulty-weighted (hard-for-you corrects count more, easy-for-you misses count more), recency-decayed (~30-day half-life), Laplace-smoothed so tiny samples never swing the score, and dragged by repeated mistakes
+- Paper-level mastery (overall, completion, accuracy, flashcard mastery, strong/needs-revision/weak chapter counts) aggregated from raw paper evidence — not an average of chapter percentages
+- Weak & strong areas and revision priority computed from real stored performance — no fake recommendations
 - Learning-based XP: correct answers, revising weak areas, flashcards, chapter tests, daily/weekly goals and milestones (+40 XP) — never XP for clicking around
 - Personal bests, milestone badges, daily minutes goal, and offline-first throughout
 - **Formula Sheet** — all formulas, searchable

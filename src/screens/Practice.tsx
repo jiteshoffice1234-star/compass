@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CreditCard, Layers, Calculator, BookA, ArrowRight, Play, Settings2, Brain, Target, AlertTriangle, RefreshCw, Check } from 'lucide-react'
 import { useStore } from '../store'
-import { chaptersForLevel, papersForLevel } from '../data/curriculum'
+import { chaptersForLevel, papersForLevel, chapterById } from '../data/curriculum'
 import { questions } from '../data/questions'
 import { flashcards } from '../data/flashcards'
 import { Card, Tappable, Button } from '../components/ui'
@@ -13,7 +13,7 @@ import { Glossary } from './Glossary'
 import { StageTestOverlay } from './StageTestOverlay'
 import { QuizOverlay, QuizMode, DifficultyFilter } from '../components/QuizOverlay'
 import { PracticeSession, SessionConfig } from '../components/PracticeSession'
-import { computeRevisionData, todayStr } from '../lib/mastery'
+import { computeRevisionData, computeLevelMastery, todayStr, Status } from '../lib/mastery'
 import { EXAM_TERMS, FOUNDATION_MCQ_BANK, hasPastPapers, pastPaperUrl } from '../data/pastPapers'
 import { color, border, shadow } from '../theme'
 
@@ -48,6 +48,26 @@ export function Practice() {
   const revision = useMemo(
     () => computeRevisionData(level, chaptersForLevel(level), progress, new Map(Object.entries(qp)), new Map(Object.entries(srs)), questions, flashcards, todayStr()),
     [level, progress, qp, srs],
+  )
+
+  // Phase 2 — Mastery Engine surfaced here: paper bars + weak/strong areas.
+  const mastery = useMemo(
+    () => computeLevelMastery(level, chaptersForLevel(level), progress, new Map(Object.entries(qp)), new Map(Object.entries(srs)), flashcards, todayStr()),
+    [level, progress, qp, srs],
+  )
+  const weakestAreas = useMemo(
+    () => mastery.chapters
+      .filter((c) => c.status === 'weak' || c.status === 'revision')
+      .sort((a, b) => (a.overall ?? 1) - (b.overall ?? 1))
+      .slice(0, 3),
+    [mastery],
+  )
+  const strongestAreas = useMemo(
+    () => mastery.chapters
+      .filter((c) => c.status === 'strong')
+      .sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0))
+      .slice(0, 3),
+    [mastery],
   )
 
   // Handle deep links from the Home dashboard: ?mode=weak / ?deck=due
@@ -140,6 +160,56 @@ export function Practice() {
             <MiniStat icon={<AlertTriangle size={13} color={color.danger} />} label="Weak chapters" value={`${revision.weakChapters.length}`} />
             <MiniStat icon={<Check size={13} color={color.success} />} label="Done (7d)" value={`${revision.recentlyCompleted.length}`} />
           </div>
+        </Card>
+
+        {/* ===== MASTERY MAP (Phase 2) ===== */}
+        <Card style={{ padding: 18, background: color.card, border: border.thin }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontWeight: 900, fontSize: 16 }}>Mastery Map</div>
+            <span style={{ fontSize: 12, fontWeight: 800, color: statusColor(mastery.status) }}>
+              {mastery.overall === null ? 'No data yet' : `${Math.round(mastery.overall * 100)}% overall`}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+            {mastery.papers.map((p) => (
+              <div key={p.paperId} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="mono" style={{ width: 46, fontSize: 11, fontWeight: 800, color: color.muted }}>{p.code}</span>
+                <div style={{ flex: 1, height: 10, background: color.surface, borderRadius: 5, overflow: 'hidden', border: border.thin }}>
+                  <div style={{ width: `${Math.round((p.overall ?? 0) * 100)}%`, height: '100%', background: statusColor(p.status), transition: 'width 0.3s' }} />
+                </div>
+                <span className="mono" style={{ width: 38, textAlign: 'right', fontSize: 12, fontWeight: 800 }}>
+                  {p.overall === null ? '—' : Math.round(p.overall * 100) + '%'}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 6 }}>🔴 Your Weakest Areas <span style={{ color: color.muted, fontWeight: 600, fontSize: 11 }}>— lowest mastery first</span></div>
+          {weakestAreas.length === 0 ? (
+            <div style={{ color: color.muted, fontSize: 12, fontWeight: 600, padding: '4px 0 10px' }}>No weak chapters yet — keep practising and they will show up here.</div>
+          ) : (
+            weakestAreas.map((st, i) => (
+              <Tappable key={st.chapterId} onClick={() => nav(`/chapter/${st.chapterId}`)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 2px', width: '100%', textAlign: 'left' }}>
+                <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: color.muted, width: 16 }}>{i + 1}.</span>
+                <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chapterById(st.chapterId)?.title ?? `Chapter ${st.chapterId}`}</span>
+                <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: statusColor(st.status) }}>{Math.round((st.overall ?? 0) * 100)}%</span>
+              </Tappable>
+            ))
+          )}
+
+          <div style={{ fontWeight: 800, fontSize: 13, margin: '12px 0 6px' }}>🟢 Your Strongest Areas</div>
+          {strongestAreas.length === 0 ? (
+            <div style={{ color: color.muted, fontSize: 12, fontWeight: 600, padding: '4px 0 2px' }}>Nothing mastered yet — keep going!</div>
+          ) : (
+            strongestAreas.map((st, i) => (
+              <Tappable key={st.chapterId} onClick={() => nav(`/chapter/${st.chapterId}`)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 2px', width: '100%', textAlign: 'left' }}>
+                <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: color.muted, width: 16 }}>{i + 1}.</span>
+                <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chapterById(st.chapterId)?.title ?? `Chapter ${st.chapterId}`}</span>
+                <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: statusColor(st.status) }}>{Math.round((st.overall ?? 0) * 100)}%</span>
+              </Tappable>
+            ))
+          )}
         </Card>
 
         <Card style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12, background: color.primaryTint, border: border.thick }} onClick={() => setSheet('setup')}>
@@ -335,6 +405,10 @@ export function Practice() {
       )}
     </div>
   )
+}
+
+function statusColor(s: Status): string {
+  return s === 'strong' ? color.success : s === 'weak' ? color.danger : s === 'revision' ? color.warning : color.muted
 }
 
 function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {

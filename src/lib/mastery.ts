@@ -13,7 +13,7 @@
 
 import { Question } from '../data/questions'
 import { Flashcard } from '../data/flashcards'
-import { Chapter, Level, chaptersForLevel } from '../data/curriculum'
+import { Chapter, Level, Paper, chaptersForLevel, papersForLevel } from '../data/curriculum'
 import type {
   QuestionPerfRow,
   FlashcardSrsRow,
@@ -168,12 +168,84 @@ export function isRecentlyLearned(srs: FlashcardSrsRow | null, today: string): b
 }
 
 // ---------------------------------------------------------------------------
-// Chapter / level mastery
+// Mastery calculation core
+// ---------------------------------------------------------------------------
+// The accuracy signal is built from REAL per-question rolls and shaped by four
+// deterministic forces:
+//   1. Difficulty — correctly answering a question that is HARD FOR THIS
+//      STUDENT proves more mastery; missing one that is easy for them is more
+//      damning. Per-question weight: hard 1.35 / medium 1.0 / easy 0.7.
+//   2. Recency — evidence decays (~half-life 30 days), so a chapter last
+//      practised a month ago contributes less than one practised today, and
+//      a stale chapter drifts back toward needing revision.
+//   3. Stability — Laplace smoothing (+1 / +2) keeps tiny samples from
+//      swinging mastery wildly (a single correct answer no longer reads 100%).
+//   4. Repeated mistakes — every persistently-failed (weak) question drags
+//      the accuracy component down beyond its raw ratio.
+
+function diffWeight(d: Difficulty): number {
+  if (d === 'hard') return 1.35
+  if (d === 'easy') return 0.7
+  return 1
+}
+
+export function daysBetween(a: string, b: string): number {
+  const da = new Date(a.slice(0, 10) + 'T00:00:00').getTime()
+  const db = new Date(b.slice(0, 10) + 'T00:00:00').getTime()
+  return Math.max(0, Math.round((db - da) / 86400000))
+}
+
+function recencyWeight(lastSeen: string | undefined, today: string): number {
+  if (!lastSeen) return 1
+  return 1 / (1 + daysBetween(lastSeen, today) / 30)
+}
+
+export interface WeightedAccuracy {
+  accuracy: number | null // 0..1 smoothed
+  attempts: number        // raw attempt count (display / confidence)
+  lastSeenDays: number | null // days since the newest attempt in the group
+}
+
+export function computeWeightedAccuracy(rows: QuestionPerfRow[], today: string): WeightedAccuracy {
+  let wCorrect = 0
+  let wWrong = 0
+  let rawTotal = 0
+  let newest: number | null = null
+  for (const p of rows) {
+    const w = recencyWeight(p.last_seen, today)
+    const dw = diffWeight(difficultyOf(p))
+    wCorrect += p.correct * w * dw
+    wWrong += p.wrong * w * (1 / dw)
+    rawTotal += p.correct + p.wrong
+    if (p.last_seen) {
+      const d = daysBetween(p.last_seen, today)
+      if (newest === null || d < newest) newest = d
+    }
+  }
+  if (rawTotal === 0) return { accuracy: null, attempts: 0, lastSeenDays: newest }
+  return { accuracy: (wCorrect + 1) / (wCorrect + wWrong + 2), attempts: rawTotal, lastSeenDays: newest }
+}
+
+/** Small deterministic freshness signal: recently-practised content gets a
+ *  tiny boost; content untouched for 3+ weeks gets a tiny drag (needs a look). */
+function recencyAdjust(lastSeenDays: number | null): number {
+  if (lastSeenDays === null) return 0
+  if (lastSeenDays <= 7) return 0.02
+  if (lastSeenDays > 21) return -0.02
+  return 0
+}
+
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v))
+}
+
+// ---------------------------------------------------------------------------
+// Chapter mastery
 // ---------------------------------------------------------------------------
 export interface ChapterStats {
   chapterId: number
   completion: number | null   // 0..1 across video/PDF/quiz evidence
-  accuracy: number | null     // 0..1 across attempted questions
+  accuracy: number | null     // 0..1 weighted, smoothed, decayed
   flashcardMastery: number | null // 0..1 fraction of cards mastered
   overall: number | null      // 0..1 weighted mastery
   status: Status
@@ -194,6 +266,21 @@ export function computeChapterStats(
   chapterCards: Flashcard[],
   today: string,
 ): ChapterStats {
+  return computeChapterStatsFromRows(
+    chapter, prog, chapterQuestionsFor(chapter.id, perfByQ), srsByCard, chapterCards, today,
+  )
+}
+
+/** Core chapter computation with pre-grouped rolls — used by the single-pass
+ *  level computation to avoid re-scanning the whole performance table per chapter. */
+export function computeChapterStatsFromRows(
+  chapter: Chapter,
+  prog: ChapterProgressRow | undefined,
+  chapterQuestions: QuestionPerfRow[],
+  srsByCard: Map<string, FlashcardSrsRow>,
+  chapterCards: Flashcard[],
+  today: string,
+): ChapterStats {
   // Completion: evidence the student engaged with the chapter's content.
   let compWeight = 0
   let compSum = 0
@@ -203,18 +290,12 @@ export function computeChapterStats(
   if (prog?.quiz_passed) { compWeight += 1; compSum += 1 }
   const completion = compWeight > 0 ? compSum / compWeight : null
 
-  // Accuracy: aggregate the chapter's question rolls.
-  const chapterQuestions = chapterQuestionsFor(chapter.id, perfByQ)
-  let correct = 0
-  let wrong = 0
+  // Accuracy: difficulty-weighted, recency-decayed, Laplace-smoothed.
+  const wa = computeWeightedAccuracy(chapterQuestions, today)
   let weak = 0
-  for (const p of chapterQuestions) {
-    correct += p.correct
-    wrong += p.wrong
-    if (isWeakQuestion(p)) weak += 1
-  }
-  const total = correct + wrong
-  const accuracy = total > 0 ? correct / total : null
+  for (const p of chapterQuestions) if (isWeakQuestion(p)) weak += 1
+  // Repeated mistakes drag accuracy beyond the raw ratio.
+  const accuracy = wa.accuracy === null ? null : Math.max(0, wa.accuracy - Math.min(0.12, weak * 0.025))
 
   // Flashcard mastery: fraction of the chapter's cards that reached mastery.
   let cardsReviewed = 0
@@ -229,16 +310,17 @@ export function computeChapterStats(
   const flashcardMastery = chapterCards.length > 0 ? mastered / chapterCards.length : null
 
   // Overall mastery: weighted blend of the components that have data.
-  // Weights re-normalise so missing components never punish the student.
+  // Weights re-normalise so missing components never punish the student,
+  // then the small recency freshness adjustment is applied.
   const W = { completion: 0.4, accuracy: 0.4, flashcards: 0.2 }
   let weight = 0
   let sum = 0
   if (completion !== null) { weight += W.completion; sum += completion * W.completion }
   if (accuracy !== null) { weight += W.accuracy; sum += accuracy * W.accuracy }
   if (flashcardMastery !== null) { weight += W.flashcards; sum += flashcardMastery * W.flashcards }
-  const overall = weight > 0 ? sum / weight : (completion ?? null)
+  const overall = weight > 0 ? clamp01(sum / weight + recencyAdjust(wa.lastSeenDays)) : (completion ?? null)
 
-  const started = (prog?.video_watched || prog?.quiz_completed || pdfs.length > 0 || total > 0 || cardsReviewed > 0) ?? false
+  const started = (prog?.video_watched || prog?.quiz_completed || pdfs.length > 0 || wa.attempts > 0 || cardsReviewed > 0) ?? false
   let status: Status
   if (!started) status = 'new'
   else if (overall === null) status = 'revision'
@@ -253,8 +335,8 @@ export function computeChapterStats(
     flashcardMastery,
     overall,
     status,
-    questionsAttempted: total,
-    questionsCorrect: correct,
+    questionsAttempted: wa.attempts,
+    questionsCorrect: chapterQuestions.reduce((s, p) => s + p.correct, 0),
     cardsReviewed,
     cardsTotal: chapterCards.length,
     cardsDue,
@@ -276,6 +358,257 @@ function safeList(raw: string | undefined | null): string[] {
     return Array.isArray(v) ? v : []
   } catch {
     return []
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Paper mastery — Question → Chapter → Paper → Level
+// ---------------------------------------------------------------------------
+// Paper stats are NOT an average of chapter percentages. Each component is
+// recomputed from raw paper-scope evidence: completion = mean chapter
+// completion (null → 0, i.e. the fraction of the paper actually engaged),
+// accuracy = the paper's own weighted/decayed/smoothed question rolls,
+// flashcard mastery = mastered cards ÷ cards in the paper, and overall is the
+// same re-normalised blend used at chapter level.
+
+export interface PaperStats {
+  paperId: number
+  code: string
+  name: string
+  overall: number | null
+  completion: number | null
+  accuracy: number | null
+  flashcardMastery: number | null
+  status: Status
+  chaptersStrong: number
+  chaptersRevision: number
+  chaptersWeak: number
+  chaptersNew: number
+  chaptersTotal: number
+  questionsAttempted: number
+  questionsCorrect: number
+  cardsMastered: number
+  cardsTotal: number
+}
+
+export function computePaperStats(
+  paper: Paper,
+  chapters: Chapter[],
+  chapterStats: Map<number, ChapterStats>,
+  paperRows: QuestionPerfRow[],
+  srsByCard: Map<string, FlashcardSrsRow>,
+  cardsByChapter: Map<number, Flashcard[]>,
+  today: string,
+): PaperStats {
+  const paperChapters = chapters.filter((c) => c.paperId === paper.id)
+
+  // Completion: mean of chapter completions (untouched chapters count as 0).
+  let completion: number | null = null
+  if (paperChapters.length > 0) {
+    let sum = 0
+    for (const c of paperChapters) sum += chapterStats.get(c.id)?.completion ?? 0
+    completion = sum / paperChapters.length
+  }
+
+  // Accuracy: the paper's own aggregate question rolls.
+  const wa = computeWeightedAccuracy(paperRows, today)
+  let weakQ = 0
+  for (const p of paperRows) if (isWeakQuestion(p)) weakQ += 1
+  const accuracy = wa.accuracy === null ? null : Math.max(0, wa.accuracy - Math.min(0.1, weakQ * 0.02))
+
+  // Flashcard mastery across the paper's chapters.
+  let mastered = 0
+  let cardsTotal = 0
+  for (const c of paperChapters) {
+    for (const card of cardsByChapter.get(c.id) ?? []) {
+      cardsTotal += 1
+      if (cardTier(srsByCard.get(card.id) ?? null) === 'mastered') mastered += 1
+    }
+  }
+  const flashcardMastery = cardsTotal > 0 ? mastered / cardsTotal : null
+
+  // Chapter status counts.
+  const counts = { strong: 0, revision: 0, weak: 0, fresh: 0 }
+  for (const c of paperChapters) {
+    const st = chapterStats.get(c.id)
+    if (!st) continue
+    if (st.status === 'strong') counts.strong += 1
+    else if (st.status === 'weak') counts.weak += 1
+    else if (st.status === 'revision') counts.revision += 1
+    else counts.fresh += 1
+  }
+
+  const W = { completion: 0.4, accuracy: 0.4, flashcards: 0.2 }
+  let weight = 0
+  let sum = 0
+  if (completion !== null) { weight += W.completion; sum += completion * W.completion }
+  if (accuracy !== null) { weight += W.accuracy; sum += accuracy * W.accuracy }
+  if (flashcardMastery !== null) { weight += W.flashcards; sum += flashcardMastery * W.flashcards }
+  const overall = weight > 0 ? clamp01(sum / weight + recencyAdjust(wa.lastSeenDays)) : completion
+
+  let status: Status = 'new'
+  if (counts.strong + counts.revision + counts.weak > 0) {
+    if (overall === null) status = 'revision'
+    else if (overall >= 0.75) status = 'strong'
+    else if (overall >= 0.5) status = 'revision'
+    else status = 'weak'
+  }
+
+  let questionsCorrect = 0
+  for (const p of paperRows) questionsCorrect += p.correct
+
+  return {
+    paperId: paper.id,
+    code: paper.code,
+    name: paper.name,
+    overall,
+    completion,
+    accuracy,
+    flashcardMastery,
+    status,
+    chaptersStrong: counts.strong,
+    chaptersRevision: counts.revision,
+    chaptersWeak: counts.weak,
+    chaptersNew: counts.fresh,
+    chaptersTotal: paperChapters.length,
+    questionsAttempted: wa.attempts,
+    questionsCorrect,
+    cardsMastered: mastered,
+    cardsTotal,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Level mastery — one efficient pass over the level's data.
+// ---------------------------------------------------------------------------
+export interface LevelMastery {
+  level: Level
+  chapters: ChapterStats[]
+  chapterById: Map<number, ChapterStats>
+  papers: PaperStats[]
+  overall: number | null
+  accuracy: number | null
+  completion: number | null
+  flashcardMastery: number | null
+  status: Status
+  questionsAttempted: number
+  questionsCorrect: number
+  chaptersStrong: number
+  chaptersRevision: number
+  chaptersWeak: number
+  chaptersNew: number
+  chaptersTotal: number
+}
+
+export function computeLevelMastery(
+  level: Level,
+  chapters: Chapter[],
+  progress: Record<number, ChapterProgressRow>,
+  perfByQ: Map<string, QuestionPerfRow>,
+  srsByCard: Map<string, FlashcardSrsRow>,
+  flashcards: Flashcard[],
+  today: string,
+): LevelMastery {
+  const levelChapters = chapters.filter((c) => c.level === level)
+  const papers = papersForLevel(level)
+  const levelIds = new Set(levelChapters.map((c) => c.id))
+  const paperOfChapter = new Map<number, number>()
+  levelChapters.forEach((c) => paperOfChapter.set(c.id, c.paperId))
+
+  // Group data ONCE — cards by chapter, rolls by chapter and by paper.
+  const cardsByChapter = new Map<number, Flashcard[]>()
+  const rowsByChapter = new Map<number, QuestionPerfRow[]>()
+  const rowsByPaper = new Map<number, QuestionPerfRow[]>()
+  for (const f of flashcards) {
+    if (!levelIds.has(f.chapterId)) continue
+    const arr = cardsByChapter.get(f.chapterId) ?? []
+    arr.push(f)
+    cardsByChapter.set(f.chapterId, arr)
+  }
+  for (const p of perfByQ.values()) {
+    if (!levelIds.has(p.chapter_id)) continue
+    const rc = rowsByChapter.get(p.chapter_id) ?? []
+    rc.push(p)
+    rowsByChapter.set(p.chapter_id, rc)
+    const pid = paperOfChapter.get(p.chapter_id)
+    if (pid === undefined) continue
+    const rp = rowsByPaper.get(pid) ?? []
+    rp.push(p)
+    rowsByPaper.set(pid, rp)
+  }
+
+  // All chapter stats in one pass.
+  const chapterById = new Map<number, ChapterStats>()
+  for (const c of levelChapters) {
+    chapterById.set(c.id, computeChapterStatsFromRows(
+      c, progress[c.id], rowsByChapter.get(c.id) ?? [], srsByCard, cardsByChapter.get(c.id) ?? [], today,
+    ))
+  }
+
+  // Paper stats.
+  const paperStats: PaperStats[] = []
+  for (const p of papers) {
+    paperStats.push(computePaperStats(p, levelChapters, chapterById, rowsByPaper.get(p.id) ?? [], srsByCard, cardsByChapter, today))
+  }
+
+  // Level-wide aggregates.
+  const levelRows: QuestionPerfRow[] = []
+  rowsByPaper.forEach((rows) => levelRows.push(...rows))
+  const wa = computeWeightedAccuracy(levelRows, today)
+  let cardsMastered = 0
+  let cardsTotal = 0
+  cardsByChapter.forEach((cards) => {
+    cardsTotal += cards.length
+    for (const c of cards) if (cardTier(srsByCard.get(c.id) ?? null) === 'mastered') cardsMastered += 1
+  })
+  const flashcardMastery = cardsTotal > 0 ? cardsMastered / cardsTotal : null
+  const completions = paperStats.map((ps) => ps.completion ?? 0)
+  const completion = completions.length > 0 ? completions.reduce((s, v) => s + v, 0) / completions.length : null
+
+  const counts = { strong: 0, revision: 0, weak: 0, fresh: 0 }
+  chapterById.forEach((st) => {
+    if (st.status === 'strong') counts.strong += 1
+    else if (st.status === 'weak') counts.weak += 1
+    else if (st.status === 'revision') counts.revision += 1
+    else counts.fresh += 1
+  })
+
+  const W = { completion: 0.4, accuracy: 0.4, flashcards: 0.2 }
+  let weight = 0
+  let sum = 0
+  if (completion !== null) { weight += W.completion; sum += completion * W.completion }
+  if (wa.accuracy !== null) { weight += W.accuracy; sum += wa.accuracy * W.accuracy }
+  if (flashcardMastery !== null) { weight += W.flashcards; sum += flashcardMastery * W.flashcards }
+  const overall = weight > 0 ? clamp01(sum / weight + recencyAdjust(wa.lastSeenDays)) : completion
+
+  let status: Status = 'new'
+  if (counts.strong + counts.revision + counts.weak > 0) {
+    if (overall === null) status = 'revision'
+    else if (overall >= 0.75) status = 'strong'
+    else if (overall >= 0.5) status = 'revision'
+    else status = 'weak'
+  }
+
+  let questionsCorrect = 0
+  chapterById.forEach((st) => { questionsCorrect += st.questionsCorrect })
+
+  return {
+    level,
+    chapters: [...chapterById.values()],
+    chapterById,
+    papers: paperStats,
+    overall,
+    accuracy: wa.accuracy,
+    completion,
+    flashcardMastery,
+    status,
+    questionsAttempted: wa.attempts,
+    questionsCorrect,
+    chaptersStrong: counts.strong,
+    chaptersRevision: counts.revision,
+    chaptersWeak: counts.weak,
+    chaptersNew: counts.fresh,
+    chaptersTotal: levelChapters.length,
   }
 }
 
@@ -301,16 +634,17 @@ export function computeMasterySummary(
   flashcards: Flashcard[],
   today: string,
 ): MasterySummary {
-  let correct = 0
-  let wrong = 0
+  let questionsCorrect = 0
   let cardsReviewed = 0
   let cardsMastered = 0
   const counts = { strong: 0, revision: 0, weak: 0 }
+  const ids = new Set(chapters.map((c) => c.id))
+  const rows: QuestionPerfRow[] = []
+  perfByQ.forEach((p) => { if (ids.has(p.chapter_id)) rows.push(p) })
   for (const chapter of chapters) {
     const cards = flashcards.filter((f) => f.chapterId === chapter.id)
     const st = computeChapterStats(chapter, progress[chapter.id], perfByQ, srsByCard, cards, today)
-    correct += st.questionsCorrect
-    wrong += st.questionsAttempted - st.questionsCorrect
+    questionsCorrect += st.questionsCorrect
     cardsReviewed += st.cardsReviewed
     for (const card of cards) {
       if (cardTier(srsByCard.get(card.id) ?? null) === 'mastered') cardsMastered += 1
@@ -319,11 +653,11 @@ export function computeMasterySummary(
     else if (st.status === 'weak') counts.weak += 1
     else if (st.status === 'revision') counts.revision += 1
   }
-  const total = correct + wrong
+  const wa = computeWeightedAccuracy(rows, today)
   return {
-    accuracy: total > 0 ? correct / total : null,
-    questionsAttempted: total,
-    questionsCorrect: correct,
+    accuracy: wa.accuracy,
+    questionsAttempted: wa.attempts,
+    questionsCorrect,
     flashcardsReviewed: cardsReviewed,
     flashcardsMastered: cardsMastered,
     chaptersStrong: counts.strong,
@@ -495,10 +829,18 @@ export function computeRevisionData(
   }
   recentlyCompleted.sort((a, b) => (progress[b.id]?.completed_at ?? '').localeCompare(progress[a.id]?.completed_at ?? ''))
 
+  const cardsByChapter = new Map<number, Flashcard[]>()
+  for (const f of flashcards) {
+    if (!levelIds.has(f.chapterId)) continue
+    const arr = cardsByChapter.get(f.chapterId) ?? []
+    arr.push(f)
+    cardsByChapter.set(f.chapterId, arr)
+  }
+
   const weakChapters: ChapterStats[] = []
   const chaptersDueRevision: ChapterStats[] = []
   for (const c of levelChapters) {
-    const st = computeChapterStats(c, progress[c.id], perfByQ, srsByCard, flashcards.filter((f) => f.chapterId === c.id), today)
+    const st = computeChapterStats(c, progress[c.id], perfByQ, srsByCard, cardsByChapter.get(c.id) ?? [], today)
     if (st.status === 'weak') weakChapters.push(st)
     if (st.status === 'revision' || st.status === 'weak') chaptersDueRevision.push(st)
   }

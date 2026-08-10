@@ -569,6 +569,30 @@ export async function saveDailyStats(p: DailyStatsRow): Promise<void> {
   }
 }
 
+// ---------- V2: recent daily stats (study consistency) ----------
+export async function getRecentDailyStats(days = 7): Promise<DailyStatsRow[]> {
+  if (!isNative) {
+    const all = lsGet<Record<string, DailyStatsRow>>('ds', {})
+    const out: DailyStatsRow[] = []
+    const today = new Date()
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(today)
+      d.setDate(d.getDate() - i)
+      const key = d.toISOString().slice(0, 10)
+      if (all[key]) out.push(all[key])
+    }
+    return out
+  }
+  try {
+    const db = getDb()
+    const r = await db.query("SELECT * FROM daily_stats WHERE day >= date('now', ?) ORDER BY day", [`-${days - 1} days`])
+    return (r.values as DailyStatsRow[]) ?? []
+  } catch (error) {
+    logDatabaseError({ operation: 'getRecentDailyStats', severity: 'WARNING', message: String(error) })
+    return []
+  }
+}
+
 // ---------- V2: milestones ----------
 export async function getMilestones(): Promise<{ id: string; unlocked_at: string }[]> {
   if (!isNative) return lsGet<{ id: string; unlocked_at: string }[]>('ms', [])

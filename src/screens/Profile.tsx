@@ -1,10 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Flame, Trophy, BookOpen, Footprints, Star, Layers, BarChart3, Brain,
   Landmark, Zap, Moon, Crown, Target, RotateCcw, Award, GraduationCap,
   Scroll, Calculator, Sigma, TrendingUp, Scale, Coins, Settings, Building2, LineChart, ClipboardList,
-  RefreshCw, Download, Upload, HelpCircle,
+  RefreshCw, Download, Upload, HelpCircle, CalendarDays, History,
 } from 'lucide-react'
 import { useStore } from '../store'
 import { useMasterySummary } from '../store'
@@ -17,6 +17,8 @@ import { BottomSheet } from '../components/BottomSheet'
 import { checkForUpdate, APP_VERSION } from '../lib/updateChecker'
 import { UpdatePopup } from '../components/UpdatePopup'
 import { exportProgressToJson, importProgressFromJson, downloadJson } from '../lib/backup'
+import { getRecentQuizSessions, getRecentDailyStats } from '../lib/store'
+import type { QuizSessionRow, DailyStatsRow } from '../lib/db'
 import { color, border, shadow, font, APP_NAME } from '../theme'
 import { THEMES } from '../lib/themes'
 
@@ -37,7 +39,23 @@ export function Profile() {
   const weeklyDef = getChallengeForWeek(weekNumber())
   const [checking, setChecking] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<{ version: string; url: string; webBuildUrl?: string | null; notes: string } | null>(null)
+  const [sessions, setSessions] = useState<QuizSessionRow[]>([])
+  const [weekDaily, setWeekDaily] = useState<DailyStatsRow[]>([])
   const importRef = useRef<HTMLInputElement>(null)
+
+  // Phase 1: study consistency + quiz history (real stored data, fetched once).
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const [s, d] = await Promise.all([getRecentQuizSessions(12), getRecentDailyStats(7)])
+      if (!cancelled) { setSessions(s); setWeekDaily(d) }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const daysStudied = weekDaily.filter((d) => d.minutes > 0 || d.questions > 0 || d.flashcards > 0).length
+  const weekQuestions = weekDaily.reduce((s, d) => s + d.questions, 0)
+  const weekCards = weekDaily.reduce((s, d) => s + d.flashcards, 0)
 
   const handleExport = async () => {
     try {
@@ -180,6 +198,56 @@ export function Profile() {
           )}
         </div>
 
+        {/* study consistency (V2) */}
+        <div style={{ padding: '14px 16px 4px' }}>
+          <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><CalendarDays size={16} color={color.secondary} /> Study Consistency</div>
+          <Card style={{ padding: 14 }}>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 46, marginBottom: 8 }}>
+              {weekDaily.length === 0 && <div style={{ color: color.muted, fontSize: 13, fontWeight: 600 }}>No study activity recorded yet.</div>}
+              {weekDaily.map((d) => {
+                const active = d.minutes > 0 || d.questions > 0 || d.flashcards > 0
+                const h = active ? Math.max(14, Math.min(44, 14 + d.minutes)) : 8
+                return (
+                  <div key={d.day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                    <div style={{ width: '100%', maxWidth: 22, height: h, borderRadius: 4, background: active ? color.secondary : color.card, border: border.thin, transition: 'height 0.3s' }} />
+                    <span className="mono" style={{ fontSize: 9, color: color.muted, fontWeight: 700, fontFamily: font.mono }}>{new Date(d.day + 'T00:00:00').toLocaleDateString('en', { weekday: 'narrow' })}</span>
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 800 }}>
+              {daysStudied} of last 7 days studied · {weekQuestions} questions · {weekCards} cards this week
+            </div>
+            <div style={{ color: color.muted, fontSize: 12, fontWeight: 600, marginTop: 2 }}>
+              {daysStudied >= 5 ? '🔥 Excellent consistency — keep it up!' : daysStudied >= 3 ? '👍 Good rhythm this week.' : 'Try to study at least 3 days a week.'}
+            </div>
+          </Card>
+        </div>
+
+        {/* recent quiz history (V2) */}
+        {sessions.length > 0 && (
+          <div style={{ padding: '14px 16px 4px' }}>
+            <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><History size={16} color={color.secondary} /> Recent Sessions</div>
+            <Card style={{ padding: 0, overflow: 'hidden' }}>
+              {sessions.map((s, i) => (
+                <div key={i}>
+                  {i > 0 && <div style={{ height: 1, background: color.black }} />}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, border: border.thin, background: s.score >= (s.total || 1) / 2 ? color.successTint : color.dangerTint, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span className="mono" style={{ fontSize: 12, fontWeight: 800, fontFamily: font.mono, color: s.score >= (s.total || 1) / 2 ? color.success : color.danger }}>{s.score}/{s.total}</span>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sessionLabel(s.mode)}</div>
+                      <div style={{ color: color.muted, fontSize: 11, fontWeight: 600 }}>{new Date(s.completed_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {s.seconds > 0 ? `${Math.round(s.seconds / 60)}m` : 'untimed'}</div>
+                    </div>
+                    <div className="mono" style={{ fontSize: 11, fontWeight: 800, color: color.muted, fontFamily: font.mono }}>{Math.round(((s.total || 1) > 0 ? s.score / s.total : 0) * 100)}%</div>
+                  </div>
+                </div>
+              ))}
+            </Card>
+          </div>
+        )}
+
         {/* milestones (V2) */}
         <div style={{ padding: '14px 16px 4px' }}>
           <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><Trophy size={16} color={color.warning} /> Milestones <span className="mono" style={{ color: color.muted, fontSize: 12, fontWeight: 700, fontFamily: font.mono }}>{milestonesUnlocked}/{milestoneList.length}</span></div>
@@ -298,6 +366,15 @@ export function Profile() {
       />
     </PageTransition>
   )
+}
+
+function sessionLabel(mode: string): string {
+  const map: Record<string, string> = {
+    chapter: 'Chapter Quiz', chapter_test: 'Chapter Test', weak: 'Weak Questions',
+    mistakes: 'Previous Mistakes', timed: 'Timed Quiz', practice: 'Practice',
+    paper: 'Paper Test', mock: 'Mock Exam', grand: 'Grand Final',
+  }
+  return map[mode] ?? 'Quiz'
 }
 
 function StatCard({ icon, value, label }: { icon: React.ReactNode; value: React.ReactNode; label: string }) {

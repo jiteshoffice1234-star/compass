@@ -86,6 +86,14 @@ export function QuizOverlay({ chapterId, pool, mode = 'chapter', difficulty = 'a
   const wrongIds = attempts.filter((a) => !a.correct).map((a) => a.q)
   const modeLabel = title ?? (mode === 'chapter_test' ? 'Full Chapter Test' : mode === 'weak' ? 'Weak Questions' : mode === 'mistakes' ? 'Previous Mistakes' : mode === 'timed' ? 'Timed Quiz' : 'Quiz')
 
+  // Visible difficulty tracking — how hard THIS question is for THIS student.
+  const currentDiff = current ? difficultyOf(qp[current.id] ?? null) : 'medium'
+  const diffChip = {
+    easy: { label: 'EASY FOR YOU', bg: color.successTint, fg: color.success },
+    medium: { label: 'MEDIUM FOR YOU', bg: color.secondaryTint, fg: color.secondary },
+    hard: { label: 'HARD FOR YOU', bg: color.dangerTint, fg: color.danger },
+  }[currentDiff]
+
   const retryWrong = useCallback(() => {
     if (!wrongIds.length) return
     const missPool = allQuestions.filter((q) => wrongIds.includes(q.id))
@@ -149,6 +157,12 @@ export function QuizOverlay({ chapterId, pool, mode = 'chapter', difficulty = 'a
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
         {!finished && current && (
           <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: 0.8, padding: '3px 8px', borderRadius: 6, border: border.thin, background: diffChip.bg, color: diffChip.fg }}>
+                {diffChip.label}
+              </div>
+              {EXPLANATIONS[current.id] && <div style={{ fontSize: 11, fontWeight: 700, color: color.muted }}>EXPLAINED ✓</div>}
+            </div>
             <div style={{ fontWeight: 800, fontSize: 17, lineHeight: 1.4, marginBottom: 20 }}>{current.question}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {current.options.map((opt, i) => {
