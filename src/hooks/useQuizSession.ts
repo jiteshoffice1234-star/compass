@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 
 export interface QuizQuestion {
   id: string
@@ -11,6 +11,8 @@ export interface QuizQuestion {
 export interface QuizAttempt {
   q: string
   correct: boolean
+  seconds?: number
+  timedOut?: boolean
 }
 
 // Chapter-quiz pass ratio. Real ICMAI papers pass at 40%, but for a 15-question
@@ -57,7 +59,12 @@ export function shuffleQuestions<T extends QuizQuestion>(arr: T[], limit: number
   return shuffle(arr).slice(0, Math.min(limit, arr.length)).map(shuffleOptions)
 }
 
-export function useQuizSession(questionPool: QuizQuestion[], limit: number) {
+export interface QuizSessionOptions {
+  /** Seconds allowed per question. When it runs out the question is auto-marked wrong. */
+  timedSeconds?: number | null
+}
+
+export function useQuizSession(questionPool: QuizQuestion[], limit: number, options: QuizSessionOptions = {}) {
   const [sessionKey, setSessionKey] = useState(0)
   const [idx, setIdx] = useState(0)
   const [selected, setSelected] = useState<number | null>(null)
@@ -65,7 +72,12 @@ export function useQuizSession(questionPool: QuizQuestion[], limit: number) {
   const [score, setScore] = useState(0)
   const [attempts, setAttempts] = useState<QuizAttempt[]>([])
   const [finished, setFinished] = useState(false)
+  const [timeLeft, setTimeLeft] = useState<number>(options.timedSeconds ?? 0)
   const submittedRef = useRef(false)
+  const startedAtRef = useRef<number>(Date.now())
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const timed = !!options.timedSeconds && options.timedSeconds > 0
 
   // Keyed on a stable identity (the pool reference from the caller's useMemo
   // plus our own session counter), so the deck is fixed for the session and
@@ -78,13 +90,38 @@ export function useQuizSession(questionPool: QuizQuestion[], limit: number) {
   )
   const current = questions[idx]
 
+  // Per-question countdown timer. Only runs while a question is unanswered.
+  useEffect(() => {
+    if (!timed || answered || finished) return
+    setTimeLeft(options.timedSeconds ?? 0)
+    startedAtRef.current = Date.now()
+    timerRef.current = setInterval(() => {
+      setTimeLeft((t) => {
+        if (t <= 1) {
+          // Time's up — auto-answer as wrong.
+          if (timerRef.current) clearInterval(timerRef.current)
+          const seconds = Math.round((Date.now() - startedAtRef.current) / 1000)
+          setAnswered(true)
+          setAttempts((prev) => [...prev, { q: current?.id ?? '', correct: false, seconds, timedOut: true }])
+          return 0
+        }
+        return t - 1
+      })
+    }, 1000)
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [timed, answered, finished, idx, current?.id, options.timedSeconds])
+
   const choose = useCallback((optionIndex: number, callback?: () => void) => {
     if (answered || finished) return
+    if (timerRef.current) clearInterval(timerRef.current)
+    const seconds = Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1000))
     setSelected(optionIndex)
     setAnswered(true)
     const correct = optionIndex === current?.correctIndex
     if (correct) setScore(prev => prev + 1)
-    setAttempts(prev => [...prev, { q: current?.id ?? '', correct }])
+    setAttempts(prev => [...prev, { q: current?.id ?? '', correct, seconds }])
     callback?.()
   }, [answered, finished, current])
 
@@ -106,8 +143,9 @@ export function useQuizSession(questionPool: QuizQuestion[], limit: number) {
     setScore(0)
     setAttempts([])
     setFinished(false)
+    setTimeLeft(options.timedSeconds ?? 0)
     submittedRef.current = false
-  }, [])
+  }, [options.timedSeconds])
 
   const getResults = useCallback(() => {
     const total = questions.length
@@ -117,8 +155,9 @@ export function useQuizSession(questionPool: QuizQuestion[], limit: number) {
       total,
       passed: score >= passMark,
       passMark,
-      perfect: score === total,
+      perfect: score === total && total > 0,
       attempts,
+      seconds: attempts.reduce((s, a) => s + (a.seconds ?? 0), 0),
     }
   }, [score, questions.length, attempts])
 
@@ -131,6 +170,8 @@ export function useQuizSession(questionPool: QuizQuestion[], limit: number) {
     finished,
     questions,
     total: questions.length,
+    timeLeft,
+    timed,
     choose,
     next,
     restart,

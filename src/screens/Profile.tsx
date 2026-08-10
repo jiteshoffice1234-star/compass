@@ -4,11 +4,14 @@ import {
   Flame, Trophy, BookOpen, Footprints, Star, Layers, BarChart3, Brain,
   Landmark, Zap, Moon, Crown, Target, RotateCcw, Award, GraduationCap,
   Scroll, Calculator, Sigma, TrendingUp, Scale, Coins, Settings, Building2, LineChart, ClipboardList,
-  RefreshCw, Download, Upload,
+  RefreshCw, Download, Upload, HelpCircle,
 } from 'lucide-react'
 import { useStore } from '../store'
+import { useMasterySummary } from '../store'
 import { chaptersForLevel, LEVEL_LABELS, papersForLevel, Level } from '../data/curriculum'
 import { levelForXp, BADGES } from '../lib/levels'
+import { MILESTONE_DEFS } from '../lib/mastery'
+import { getChallengeForWeek, weekNumber } from '../lib/levels'
 import { Card, Tappable, PageTransition, Button } from '../components/ui'
 import { BottomSheet } from '../components/BottomSheet'
 import { checkForUpdate, APP_VERSION } from '../lib/updateChecker'
@@ -28,8 +31,10 @@ const BADGE_ICONS: Record<string, any> = {
 const LEVEL_OPTIONS: Level[] = ['foundation', 'intermediate', 'final']
 
 export function Profile() {
-  const { name, totalXp, currentStreak, longestStreak, progress, badges, dailyGoal, level: userLevel, setDailyGoal, setLevel, resetProgress, showToast, refreshProgress, uiMode, setTheme } = useStore()
+  const { name, totalXp, currentStreak, longestStreak, progress, badges, dailyGoal, dailyMinutesGoal, milestones, bests, weeklyProgress, weeklyCompleted, level: userLevel, setDailyGoal, setDailyMinutesGoal, setLevel, resetProgress, showToast, refreshProgress, uiMode, setTheme } = useStore()
   const [sheet, setSheet] = useState<'none' | 'goal' | 'reset' | 'level' | 'theme'>('none')
+  const mastery = useMasterySummary()
+  const weeklyDef = getChallengeForWeek(weekNumber())
   const [checking, setChecking] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<{ version: string; url: string; webBuildUrl?: string | null; notes: string } | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
@@ -62,6 +67,11 @@ export function Profile() {
   const level = levelForXp(totalXp)
   const levelChapters = chaptersForLevel(userLevel)
   const chaptersDone = levelChapters.filter((c) => progress[c.id]?.completed).length
+  const milestoneList = MILESTONE_DEFS
+  const milestonesUnlocked = milestoneList.filter((m) => milestones[m.id]).length
+  const bestQuiz = bests['quiz_best_pct']?.value ?? null
+  const bestDay = bests['fc_best_day']?.value ?? null
+  const weeklyPct = weeklyDef.target > 0 ? Math.min(1, weeklyProgress / weeklyDef.target) : 0
   const relevantBadges = BADGES.filter((b) => {
     if (b.id.startsWith('paper_')) return papersForLevel(userLevel).some((p) => `paper_${p.id}` === b.id)
     if (b.id === 'foundation') return userLevel === 'foundation'
@@ -129,6 +139,66 @@ export function Profile() {
           </div>
         </div>
 
+        {/* study stats (V2) */}
+        <div style={{ padding: '14px 16px 4px' }}>
+          <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><BarChart3 size={16} color={color.secondary} /> Study Stats</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            <StatCard icon={<Target size={18} color={color.warning} />} value={mastery.accuracy !== null ? `${Math.round(mastery.accuracy * 100)}%` : '—'} label="Accuracy" />
+            <StatCard icon={<HelpCircle size={18} color={color.secondary} />} value={mastery.questionsAttempted} label="Questions" />
+            <StatCard icon={<Layers size={18} color={color.success} />} value={mastery.flashcardsReviewed} label="Cards reviewed" />
+          </div>
+          {/* weekly challenge progress */}
+          {weeklyDef && (
+            <div style={{ marginTop: 10, background: color.card, border: border.thin, borderRadius: 10, padding: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Trophy size={18} color={color.warning} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 800 }}>{weeklyCompleted ? 'Weekly goal complete 🎉' : 'Weekly goal'}</div>
+                <div style={{ color: color.muted, fontSize: 12, fontWeight: 600 }}>{weeklyDef.name} · {weeklyProgress}/{weeklyDef.target}</div>
+                <div style={{ height: 6, background: color.surface, border: border.thin, borderRadius: 4, overflow: 'hidden', marginTop: 6 }}>
+                  <div style={{ height: '100%', width: `${Math.round(weeklyPct * 100)}%`, background: color.warning }} />
+                </div>
+              </div>
+              <div className="mono" style={{ fontSize: 14, fontWeight: 800, fontFamily: font.mono }}>{Math.round(weeklyPct * 100)}%</div>
+            </div>
+          )}
+          {/* personal bests */}
+          {(bestQuiz !== null || bestDay !== null) && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
+              {bestQuiz !== null && (
+                <div style={{ background: color.card, border: border.thin, borderRadius: 8, padding: 10 }}>
+                  <div className="mono" style={{ fontWeight: 800, fontSize: 17, fontFamily: font.mono }}>{bestQuiz}%</div>
+                  <div style={{ color: color.muted, fontSize: 11, fontWeight: 700 }}>Best quiz score</div>
+                </div>
+              )}
+              {bestDay !== null && (
+                <div style={{ background: color.card, border: border.thin, borderRadius: 8, padding: 10 }}>
+                  <div className="mono" style={{ fontWeight: 800, fontSize: 17, fontFamily: font.mono }}>{bestDay}</div>
+                  <div style={{ color: color.muted, fontSize: 11, fontWeight: 700 }}>Most cards in a day</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* milestones (V2) */}
+        <div style={{ padding: '14px 16px 4px' }}>
+          <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}><Trophy size={16} color={color.warning} /> Milestones <span className="mono" style={{ color: color.muted, fontSize: 12, fontWeight: 700, fontFamily: font.mono }}>{milestonesUnlocked}/{milestoneList.length}</span></div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {milestoneList.map((m) => {
+              const unlocked = !!milestones[m.id]
+              return (
+                <div key={m.id} style={{ display: 'flex', gap: 10, alignItems: 'center', background: unlocked ? color.card : color.surface, border: border.thin, borderRadius: 8, boxShadow: unlocked ? shadow.sm : 'none', padding: 10, opacity: unlocked ? 1 : 0.55 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 6, border: border.thin, background: unlocked ? color.warningTint : color.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 16 }}>{unlocked ? '🏆' : '🔒'}</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</div>
+                    <div style={{ color: color.muted, fontSize: 11, lineHeight: 1.3, fontWeight: 600 }}>{unlocked ? 'Unlocked · +40 XP' : m.desc}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
         {/* settings */}
         <div style={{ padding: '14px 16px 4px' }}>
           <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 8 }}>Settings</div>
@@ -137,7 +207,7 @@ export function Profile() {
             <div style={{ height: 1, background: color.black }} />
             <SettingRow icon={<Settings size={16} color={color.primary} />} label="Theme" value={THEMES.find(t => t.id === uiMode)?.name || 'Default'} onClick={() => setSheet('theme')} />
             <div style={{ height: 1, background: color.black }} />
-            <SettingRow icon={<Target size={16} color={color.success} />} label="Daily goal" value={`${dailyGoal} ${dailyGoal === 1 ? 'chapter' : 'chapters'}`} onClick={() => setSheet('goal')} />
+            <SettingRow icon={<Target size={16} color={color.success} />} label="Daily goal" value={`${dailyGoal} ch · ${dailyMinutesGoal}m`} onClick={() => setSheet('goal')} />
             <div style={{ height: 1, background: color.black }} />
             <SettingRow icon={<RefreshCw size={16} color={color.secondary} className={checking ? 'spin' : ''} />} label={checking ? 'Checking…' : 'Check for update'} value={`v${APP_VERSION}`} onClick={() => !checking && checkUpdates()} />
             <div style={{ height: 1, background: color.black }} />
@@ -170,12 +240,19 @@ export function Profile() {
 
       <BottomSheet open={sheet === 'goal'} onClose={() => setSheet('none')} title="Daily Goal">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '2px 4px 4px 2px' }}>
-          {[1, 2, 3].map((g) => (
-            <Tappable key={g} onClick={() => { setDailyGoal(g); setSheet('none') }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: dailyGoal === g ? color.primaryTint : color.card, border: dailyGoal === g ? border.thick : border.thin, borderRadius: 10, boxShadow: shadow.sm, padding: 16 }}>
-              <span style={{ fontWeight: 800, fontSize: 15 }}>{g} {g === 1 ? 'chapter' : 'chapters'} / day</span>
-              {dailyGoal === g && <span style={{ color: color.secondary, fontWeight: 900 }}>✓</span>}
-            </Tappable>
-          ))}
+          <div style={{ fontWeight: 800, fontSize: 14 }}>Chapters per day</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[1, 2, 3].map((g) => (
+              <Tappable key={g} onClick={() => setDailyGoal(g)} style={{ flex: 1, textAlign: 'center', background: dailyGoal === g ? color.primaryTint : color.card, border: dailyGoal === g ? border.thick : border.thin, borderRadius: 10, boxShadow: shadow.sm, padding: 14, fontWeight: 800, fontSize: 15 }}>{g}</Tappable>
+            ))}
+          </div>
+          <div style={{ fontWeight: 800, fontSize: 14, marginTop: 6 }}>Study minutes per day</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[15, 30, 45, 60].map((m) => (
+              <Tappable key={m} onClick={() => setDailyMinutesGoal(m)} style={{ flex: 1, textAlign: 'center', background: dailyMinutesGoal === m ? color.primaryTint : color.card, border: dailyMinutesGoal === m ? border.thick : border.thin, borderRadius: 10, boxShadow: shadow.sm, padding: 14, fontWeight: 800, fontSize: 15 }}>{m}m</Tappable>
+            ))}
+          </div>
+          <Button variant="primary" onClick={() => setSheet('none')} style={{ width: '100%', marginTop: 4 }}>Done</Button>
         </div>
       </BottomSheet>
 

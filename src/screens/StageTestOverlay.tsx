@@ -29,9 +29,21 @@ export function StageTestOverlay({ paperId, grand, level, onClose }: { paperId: 
 
   const [confetti, setConfetti] = useState(false)
   const completeGrandFinal = useStore((s) => s.completeGrandFinal)
+  const recordQuizSessionResult = useStore((s) => s.recordQuizSessionResult)
 
   useEffect(() => {
     if (finished) {
+      const { score, perfect, attempts, seconds } = getResults()
+      // V2: record the paper/grand test into the performance engine.
+      recordQuizSessionResult({
+        chapterId: grand ? null : paperId,
+        mode: grand ? 'grand' : 'paper',
+        score,
+        total: attempts.length,
+        perfect,
+        attempts,
+        seconds,
+      }).catch(() => {})
       const { passed } = getResults()
       if (grand && passed) {
         completeGrandFinal()

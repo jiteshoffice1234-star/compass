@@ -33,6 +33,54 @@ export interface FlashcardProgressRow {
   review_count: number
 }
 
+export interface FlashcardSrsRow {
+  flashcard_id: string
+  ease: number
+  interval: number
+  due: string
+  lapses: number
+  streak: number
+  last_reviewed: string
+  reviews: number
+}
+
+export interface QuestionPerfRow {
+  question_id: string
+  chapter_id: number
+  correct: number
+  wrong: number
+  streak: number
+  last_seen: string
+  last_result: number // 1 = correct last time, 0 = wrong last time
+}
+
+export interface QuizSessionRow {
+  id?: number
+  mode: string
+  chapter_id: number | null
+  score: number
+  total: number
+  seconds: number
+  completed_at: string
+}
+
+export interface DailyStatsRow {
+  day: string
+  questions: number
+  correct: number
+  flashcards: number
+  minutes: number
+  quizzes: number
+  tests: number
+  revisions: number
+}
+
+export interface PersonalBestRow {
+  key: string
+  value: number
+  achieved_at: string
+}
+
 export interface WeeklyChallengeRow {
   id: number
   challenge_id: number
@@ -49,6 +97,7 @@ export interface UserProfileRow {
   onboarding_complete: number
   pdfs_generated: number
   level: string
+  daily_minutes_goal: number
 }
 
 const SCHEMA = `
@@ -59,7 +108,8 @@ CREATE TABLE IF NOT EXISTS user_profile (
   ui_mode TEXT DEFAULT 'dark',
   onboarding_complete INTEGER DEFAULT 0,
   pdfs_generated INTEGER DEFAULT 0,
-  level TEXT DEFAULT 'foundation'
+  level TEXT DEFAULT 'foundation',
+  daily_minutes_goal INTEGER DEFAULT 30
 );
 CREATE TABLE IF NOT EXISTS chapter_progress (
   chapter_id INTEGER PRIMARY KEY,
@@ -113,6 +163,54 @@ CREATE TABLE IF NOT EXISTS weekly_challenge (
   progress INTEGER DEFAULT 0,
   completed INTEGER DEFAULT 0
 );
+-- V2: performance / mastery engine tables
+CREATE TABLE IF NOT EXISTS question_performance (
+  question_id TEXT PRIMARY KEY,
+  chapter_id INTEGER DEFAULT 0,
+  correct INTEGER DEFAULT 0,
+  wrong INTEGER DEFAULT 0,
+  streak INTEGER DEFAULT 0,
+  last_seen TEXT,
+  last_result INTEGER
+);
+CREATE TABLE IF NOT EXISTS flashcard_srs (
+  flashcard_id TEXT PRIMARY KEY,
+  ease REAL DEFAULT 2.5,
+  interval INTEGER DEFAULT 0,
+  due TEXT,
+  lapses INTEGER DEFAULT 0,
+  streak INTEGER DEFAULT 0,
+  last_reviewed TEXT,
+  reviews INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS quiz_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mode TEXT,
+  chapter_id INTEGER,
+  score INTEGER DEFAULT 0,
+  total INTEGER DEFAULT 0,
+  seconds INTEGER DEFAULT 0,
+  completed_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS daily_stats (
+  day TEXT PRIMARY KEY,
+  questions INTEGER DEFAULT 0,
+  correct INTEGER DEFAULT 0,
+  flashcards INTEGER DEFAULT 0,
+  minutes INTEGER DEFAULT 0,
+  quizzes INTEGER DEFAULT 0,
+  tests INTEGER DEFAULT 0,
+  revisions INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS milestones (
+  id TEXT PRIMARY KEY,
+  unlocked_at TEXT
+);
+CREATE TABLE IF NOT EXISTS personal_bests (
+  key TEXT PRIMARY KEY,
+  value REAL DEFAULT 0,
+  achieved_at TEXT
+);
 `
 
 let db: SQLiteDBConnection | null = null
@@ -127,6 +225,19 @@ export async function initDatabase(): Promise<void> {
   db = conn
   await db.open()
   await db.execute(SCHEMA)
+
+  // ---- V2 migrations (idempotent) ----
+  // user_profile.daily_minutes_goal — added in V2. Older installs (whose table
+  // was created before the column existed) get it via ALTER TABLE.
+  try {
+    const cols = await db.query('PRAGMA table_info(user_profile)')
+    const hasMinutes = (cols.values ?? []).some((c: any) => c.name === 'daily_minutes_goal')
+    if (!hasMinutes) {
+      await db.run('ALTER TABLE user_profile ADD COLUMN daily_minutes_goal INTEGER DEFAULT 30')
+    }
+  } catch (error) {
+    console.warn('[DB] daily_minutes_goal migration failed (non-critical):', error)
+  }
 
   // ensure user_profile row exists
   const res = await db.query('SELECT id FROM user_profile WHERE id = 1')

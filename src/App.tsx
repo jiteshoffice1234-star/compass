@@ -10,10 +10,11 @@ import { Chapters } from './screens/Chapters'
 import { ChapterDetail } from './screens/ChapterDetail'
 import { Practice } from './screens/Practice'
 import { Profile } from './screens/Profile'
+import { Revision } from './screens/Revision'
 import { Onboarding } from './screens/Onboarding'
 import { BottomNav } from './components/BottomNav'
 import { Toast } from './components/Toast'
-import { LevelUpOverlay, BadgeUnlockOverlay } from './components/Overlay'
+import { LevelUpOverlay, BadgeUnlockOverlay, MilestoneUnlockOverlay } from './components/Overlay'
 import { PdfViewer } from './screens/PdfViewer'
 import { LoaderScreen } from './components/Loader'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -21,7 +22,7 @@ import { color } from './theme'
 import { OfflineBanner } from './components/OfflineBanner'
 
 function AppContent() {
-  const { ready, onboardingComplete, init, levelUp, badgeUnlock, toast, clearToast, uiMode } = useStore()
+  const { ready, onboardingComplete, init, levelUp, badgeUnlock, milestoneUnlock, toast, clearToast, uiMode } = useStore()
   const [updateInfo, setUpdateInfo] = useState<{ version: string; url: string; webBuildUrl?: string | null; notes: string; ota: boolean } | null>(null)
 
   useEffect(() => {
@@ -65,6 +66,7 @@ function AppContent() {
             <Route path="/chapters" element={<Chapters />} />
             <Route path="/chapter/:id" element={<ChapterDetail />} />
             <Route path="/practice" element={<Practice />} />
+            <Route path="/revision" element={<Revision />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/pdf" element={<PdfViewer />} />
           </Routes>
@@ -80,6 +82,7 @@ function AppContent() {
       <Toast message={toast} onClose={clearToast} />
       <LevelUpOverlay data={levelUp} />
       <BadgeUnlockOverlay data={badgeUnlock} />
+      <MilestoneUnlockOverlay data={milestoneUnlock} />
       <UpdatePopup
         open={!!updateInfo}
         latestVersion={updateInfo?.version || ''}

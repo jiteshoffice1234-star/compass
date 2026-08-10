@@ -46,13 +46,15 @@ CMA students in India face a fragmented study experience:
 ### Onboarding
 - Personalized welcome with name input
 - Level selection (Foundation / Intermediate / Final)
-- Daily study goal setting (1–3 chapters per day)
+- Daily study goal setting (chapters + minutes per day)
 - Clean, guided first-run experience
 
 ### Home Dashboard
+- **Today's Plan (V2)** — a live daily dashboard: weak questions due, flashcards due, recommended chapter, daily minutes/chapter target and streak, with one **Start Studying** action that jumps straight into what the engine says you need most
 - **"Continue Learning"** card — jump straight back into your current chapter
 - **XP counter** — see your total experience points at a glance
 - **Streak tracker** — maintain your daily study streak
+- **Weekly goal** — a rotating weekly challenge with progress bar
 - **Paper progress** — circular progress rings for each paper (FBLC, FFCA, FBMS, FBEM, etc.)
 - **Search bar** — search chapters, glossary terms, and formulas instantly
 
@@ -60,14 +62,24 @@ CMA students in India face a fragmented study experience:
 - **Everything unlocked** — all Foundation, Intermediate and Final chapters open from day one
 - **Video lectures** — embedded YouTube player with curated CMA-specific lectures
 - **Overview tab** — key points, XP reward, paper/section info
-- **Quiz tab** — 15-question MCQ quiz, fair 50% pass mark, drawn from a 3,600+ question bank
-- **Flashcards tab** — chapter-wise flashcards with term/definition flip
+- **Quiz tab (V2)** — 15-question MCQ quiz with a fair 50% pass mark, plus **Full Chapter Test**, **Weak Questions**, **Previous Mistakes** and **Timed (30s/question)** modes, difficulty filtering (Easy/Medium/Hard derived from *your* accuracy), instant explanation + correct answer after every question, and a **Retry Wrong Questions** button on results. Questions never lose XP and the order never shuffles mid-quiz.
+- **Chapter Mastery (V2)** — completion, accuracy, flashcard mastery and overall mastery % with clear 🟢 Strong / 🟡 Needs Revision / 🔴 Weak status
+- **Flashcards tab (V2)** — spaced repetition with Again / Hard / Good / Easy grading and card tier labels (new, learning, weak, difficult, mastered)
 - **PDF tab** — in-app PDF reader with Summary, Practice Problems, and Cheat Sheet
 - **Offline study material** — all 23 official ICMAI books (Foundation, Intermediate, Final) bundled inside the app — read every book with zero internet
 
 ### Practice Hub
-- **Flashcards** — spaced repetition drills across all chapters
+- **Smart Quiz (V2)** — the engine builds your session from real performance: weak questions, previous mistakes, timed or mixed practice, with optional difficulty focus
+- **Revision hub (V2)** — due-for-revision flashcards, difficult cards, weak topics, wrong questions and recently completed chapters, each with a one-tap start action
+- **Flashcards (V2)** — spaced repetition with Due Today / Weak / Difficult / Recently Learned / All filter decks
 - **Paper Tests** — 20 mixed questions from a paper, Grand Final with 50 questions
+
+### Mastery Engine (V2)
+- Tracks every question's correct/wrong rolls and streaks locally and derives per-question difficulty and weakness
+- SM-2-style flashcard scheduling (ease, interval, lapses, streak) fully stored on-device
+- Chapter/level mastery, weak & strong areas and revision priority computed from real stored performance — no fake recommendations
+- Learning-based XP: correct answers, revising weak areas, flashcards, chapter tests, daily/weekly goals and milestones (+40 XP) — never XP for clicking around
+- Personal bests, milestone badges, daily minutes goal, and offline-first throughout
 - **Formula Sheet** — all formulas, searchable
 - **Glossary** — 150+ CMA terms, A–Z
 

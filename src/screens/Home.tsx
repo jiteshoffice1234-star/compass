@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Flame, Search, Play, BookOpen, User } from 'lucide-react'
+import { Flame, Search, Play, BookOpen, User, Zap, Target, RefreshCw } from 'lucide-react'
 import { useStore } from '../store'
-import { chaptersForLevel, papersForLevel, LEVEL_LABELS } from '../data/curriculum'
+import { useDailyPlan } from '../store'
+import { chaptersForLevel, papersForLevel, LEVEL_LABELS, chapterById } from '../data/curriculum'
 import { ProgressRing, Card, Tappable, Button } from '../components/ui'
 import { SearchOverlay } from './SearchOverlay'
 import { safeJsonParse } from '../lib/helpers'
@@ -17,6 +18,7 @@ export function Home() {
   const totalXp = useStore((s) => s.totalXp)
   const name = useStore((s) => s.name)
   const [searchOpen, setSearchOpen] = useState(false)
+  const plan = useDailyPlan()
 
   const levelChapters = useMemo(() => chaptersForLevel(level).sort((a, b) => a.id - b.id), [level])
   const firstChapter = levelChapters[0]
@@ -24,7 +26,6 @@ export function Home() {
   const inProgress = useMemo(() => {
     return levelChapters.find((c) => {
       const p = progress[c.id]
-      // Guard against corrupt pdfs_read JSON — never let it crash the dashboard.
       const pdfsRead = p ? safeJsonParse<string[]>(p.pdfs_read, []) : []
       return p && !p.completed && (p.video_watched || p.quiz_completed || pdfsRead.length > 0)
     })
@@ -41,6 +42,16 @@ export function Home() {
   }).filter((s) => s.total > 0)
 
   const totalDone = levelChapters.filter((c) => progress[c.id]?.completed).length
+  const recommended = plan.recommendedChapterId ? chapterById(plan.recommendedChapterId) : null
+  const minutesPct = plan.dailyGoalMinutes > 0 ? Math.min(1, plan.minutesToday / plan.dailyGoalMinutes) : 0
+  const weeklyPct = plan.weeklyTarget > 0 ? Math.min(1, plan.weeklyProgress / plan.weeklyTarget) : 0
+
+  const startStudying = () => {
+    if (plan.weakQuestions > 0) { nav('/practice?mode=weak'); return }
+    if (plan.dueFlashcards > 0) { nav('/practice?deck=due'); return }
+    if (plan.recommendedChapterId) { nav(`/chapter/${plan.recommendedChapterId}`); return }
+    nav('/chapters')
+  }
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: color.surface }}>
@@ -71,7 +82,48 @@ export function Home() {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }} className="safe-bottom">
-        {/* hero: continue learning */}
+        {/* ===== TODAY'S PLAN ===== */}
+        <Card style={{ padding: 16, marginBottom: 16, background: color.primaryTint }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: 12, color: color.text, fontWeight: 900, letterSpacing: 1.2 }}>
+              TODAY'S PLAN
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: color.muted }}>
+              {plan.dailyDone ? '🎯 Goal complete!' : `${plan.minutesToday}/${plan.dailyGoalMinutes}m today`}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+            <PlanStat icon={<Zap size={15} color={color.danger} />} label="Weak questions" value={`${plan.weakQuestions}`} />
+            <PlanStat icon={<RefreshCw size={15} color={color.warning} />} label="Flashcards due" value={`${plan.dueFlashcards}`} />
+            <PlanStat icon={<Target size={15} color={color.secondary} />} label="Streak" value={`${plan.streak}d`} />
+          </div>
+          <div style={{ marginTop: 12, background: color.card, border: border.thin, borderRadius: 10, padding: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: color.muted }}>DAILY TARGET · {plan.dailyGoalMinutes} MIN + {plan.dailyGoalChapters} CH</div>
+              <div className="mono" style={{ fontSize: 12, fontWeight: 800, fontFamily: font.mono }}>{Math.round(minutesPct * 100)}%</div>
+            </div>
+            <div style={{ height: 8, background: color.surface, border: border.thin, borderRadius: 5, overflow: 'hidden', marginTop: 6 }}>
+              <div style={{ height: '100%', width: `${Math.round(minutesPct * 100)}%`, background: color.secondary, transition: 'width 0.3s' }} />
+            </div>
+          </div>
+          {recommended && (
+            <Tappable onClick={() => nav(`/chapter/${recommended.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, background: color.card, border: border.thin, borderRadius: 10, padding: 12, width: '100%', textAlign: 'left' }}>
+              <BookOpen size={18} color={color.secondary} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: color.muted }}>RECOMMENDED CHAPTER</div>
+                <div style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Ch {recommended.id}: {recommended.title}</div>
+              </div>
+              {plan.recommendedMastery !== null && (
+                <ProgressRing value={plan.recommendedMastery} size={40} label={<span style={{ fontSize: 11 }}>{Math.round(plan.recommendedMastery * 100)}%</span>} />
+              )}
+            </Tappable>
+          )}
+          <Button variant="primary" onClick={startStudying} style={{ marginTop: 12, width: '100%' }}>
+            <Play size={18} /> Start Studying
+          </Button>
+        </Card>
+
+        {/* ===== CONTINUE LEARNING ===== */}
         <Card style={{ padding: 16, marginBottom: 16, background: color.primary }}>
           <div style={{ fontSize: 12, color: color.text, fontWeight: 900, letterSpacing: 1.2 }}>
             {inProgress ? 'CONTINUE LEARNING' : 'START LEARNING'}
@@ -114,6 +166,18 @@ export function Home() {
           </Card>
         </div>
 
+        {/* weekly goal */}
+        {plan.weeklyName && (
+          <Card style={{ padding: 14, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Target size={20} color={color.success} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 800 }}>{plan.weeklyDone ? 'Weekly goal complete! 🎉' : 'Weekly goal'}</div>
+              <div style={{ color: color.muted, fontSize: 12, fontWeight: 600 }}>{plan.weeklyName} · {plan.weeklyProgress}/{plan.weeklyTarget}</div>
+            </div>
+            <ProgressRing value={weeklyPct} size={42} label={<span style={{ fontSize: 11 }}>{Math.round(weeklyPct * 100)}%</span>} />
+          </Card>
+        )}
+
         {/* recently viewed */}
         {recent.length > 0 && (
           <div style={{ marginBottom: 16 }}>
@@ -146,6 +210,15 @@ export function Home() {
       </div>
 
       {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} />}
+    </div>
+  )
+}
+
+function PlanStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div style={{ flex: 1, background: color.card, border: border.thin, borderRadius: 10, padding: '10px 6px', textAlign: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}>{icon}<span className="mono" style={{ fontWeight: 800, fontSize: 16, fontFamily: font.mono }}>{value}</span></div>
+      <div style={{ color: color.muted, fontSize: 10, marginTop: 3, fontWeight: 700 }}>{label}</div>
     </div>
   )
 }

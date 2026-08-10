@@ -29,6 +29,7 @@ function shuffle<T>(arr: T[]): T[] {
 
 export function PracticeSession({ config, onClose }: { config: SessionConfig; onClose: () => void }) {
   const bumpWeekly = useStore((s) => s.bumpWeeklyProgress)
+  const recordQuizSessionResult = useStore((s) => s.recordQuizSessionResult)
 
   const pool = useMemo<Question[]>(() => {
     const chapterIds = new Set(
@@ -56,6 +57,20 @@ export function PracticeSession({ config, onClose }: { config: SessionConfig; on
     if (answered > 0) bumpWeekly(answered)
     const score = pool.reduce((s, qq, i) => s + (answers[i] === qq.correctIndex ? 1 : 0), 0)
     if (pool.length > 0 && score / pool.length >= 0.4) setConfetti(true)
+    // V2: feed every answer into the performance engine (rolls, XP, milestones).
+    const attempts = pool.map((qq, i) => ({
+      q: qq.id,
+      correct: answers[i] === qq.correctIndex,
+    }))
+    recordQuizSessionResult({
+      chapterId: null,
+      mode: 'mock',
+      score,
+      total: pool.length,
+      perfect: pool.length > 0 && score === pool.length,
+      attempts,
+      seconds: config.timed ? config.minutes * 60 - remaining : 0,
+    }).catch(() => {})
   }
 
   useEffect(() => {

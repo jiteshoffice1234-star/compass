@@ -27,6 +27,26 @@ const BADGE_ICONS: Record<string, string> = {
   landmark: '🏛️', zap: '⚡', moon: '🌙', crown: '👑',
 }
 
+export function MilestoneUnlockOverlay({ data }: { data: { name: string } | null }) {
+  return (
+    <AnimatePresence>
+      {data && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          style={{ position: 'absolute', inset: 0, zIndex: 500, background: 'rgba(28,41,60,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+            style={{ background: color.successTint, border: border.thick, borderRadius: 14, boxShadow: shadow.lg, padding: '28px 28px', textAlign: 'center', width: '78%' }}>
+            <motion.div animate={{ scale: [0.8, 1.1, 1] }} transition={{ duration: 0.5 }} style={{ fontSize: 56, marginBottom: 8 }}>🏆</motion.div>
+            <div style={{ color: color.success, fontWeight: 900, fontSize: 13, letterSpacing: 1.5 }}>MILESTONE REACHED</div>
+            <div style={{ color: color.text, fontWeight: 900, fontSize: 21, marginTop: 6 }}>{data.name}</div>
+            <div style={{ color: color.muted, fontSize: 13, marginTop: 6 }}>+40 XP · Your progress is compounding.</div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 export function BadgeUnlockOverlay({ data }: { data: { id: string } | null }) {
   if (!data) return null
   const badge = BADGES.find((b) => b.id === data.id)

@@ -1,8 +1,10 @@
 import {
   getProfile, saveProfile, getAllChapterProgress, saveChapterProgress,
   getBadges, unlockBadge, getStreak, saveStreak, getBookmarks, toggleBookmark,
+  getAllQuestionPerf, saveQuestionPerf, getAllFlashcardSrs, saveFlashcardSrs,
+  getMilestones, unlockMilestone, getAllPersonalBests, savePersonalBest,
 } from './store'
-import type { ChapterProgressRow, UserProfileRow, BadgeRow } from './db'
+import type { ChapterProgressRow, UserProfileRow, BadgeRow, QuestionPerfRow, FlashcardSrsRow, PersonalBestRow } from './db'
 import type { StreakRow } from './store'
 import { APP_VERSION } from './updateChecker'
 
@@ -16,6 +18,11 @@ export interface BackupData {
     badges: BadgeRow[]
     streak: StreakRow
     bookmarks: number[]
+    // V2 performance engine data
+    question_perf?: QuestionPerfRow[]
+    flashcard_srs?: FlashcardSrsRow[]
+    milestones?: { id: string; unlocked_at: string }[]
+    personal_bests?: PersonalBestRow[]
   }
 }
 
@@ -25,9 +32,13 @@ export async function exportProgressToJson(): Promise<string> {
   const badges = await getBadges()
   const streak = await getStreak()
   const bookmarks = await getBookmarks()
+  const questionPerf = await getAllQuestionPerf()
+  const flashcardSrs = await getAllFlashcardSrs()
+  const milestones = await getMilestones()
+  const personalBests = await getAllPersonalBests()
 
   const backup: BackupData = {
-    version: '1.0',
+    version: '1.1',
     exported_at: new Date().toISOString(),
     app_version: APP_VERSION,
     data: {
@@ -36,6 +47,10 @@ export async function exportProgressToJson(): Promise<string> {
       badges,
       streak,
       bookmarks,
+      question_perf: questionPerf,
+      flashcard_srs: flashcardSrs,
+      milestones,
+      personal_bests: personalBests,
     },
   }
 
@@ -46,7 +61,7 @@ export async function importProgressFromJson(jsonString: string): Promise<{ succ
   try {
     const backup = JSON.parse(jsonString) as BackupData
 
-    if (!backup.version || backup.version !== '1.0') {
+    if (!backup.version || !['1.0', '1.1'].includes(backup.version)) {
       throw new Error('Unsupported backup format version')
     }
     if (!backup.data || !backup.data.profile || !Array.isArray(backup.data.chapters)) {
@@ -112,9 +127,31 @@ export async function importProgressFromJson(jsonString: string): Promise<{ succ
       }
     }
 
+    // ---- V2 performance data (rolls, SRS schedules, milestones, bests) ----
+    if (Array.isArray(backup.data.question_perf)) {
+      for (const p of backup.data.question_perf) {
+        if (p && typeof p.question_id === 'string') await saveQuestionPerf(p)
+      }
+    }
+    if (Array.isArray(backup.data.flashcard_srs)) {
+      for (const s of backup.data.flashcard_srs) {
+        if (s && typeof s.flashcard_id === 'string') await saveFlashcardSrs(s)
+      }
+    }
+    if (Array.isArray(backup.data.milestones)) {
+      for (const m of backup.data.milestones) {
+        if (m && typeof m.id === 'string') await unlockMilestone(m.id)
+      }
+    }
+    if (Array.isArray(backup.data.personal_bests)) {
+      for (const b of backup.data.personal_bests) {
+        if (b && typeof b.key === 'string') await savePersonalBest(b.key, b.value ?? 0)
+      }
+    }
+
     return {
       success: true,
-      message: `✓ Restored ${backup.data.chapters.length} chapters, ${backup.data.badges?.length || 0} badges, ${backup.data.bookmarks?.length || 0} bookmarks`,
+      message: `✓ Restored ${backup.data.chapters.length} chapters, ${backup.data.badges?.length || 0} badges, ${backup.data.bookmarks?.length || 0} bookmarks, ${backup.data.question_perf?.length || 0} question rolls, ${backup.data.flashcard_srs?.length || 0} card schedules`,
     }
   } catch (e) {
     return {

@@ -1,23 +1,34 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { CreditCard, Layers, Calculator, BookA, ArrowRight, Play, Settings2 } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { CreditCard, Layers, Calculator, BookA, ArrowRight, Play, Settings2, Brain, Target, AlertTriangle, RefreshCw, Check } from 'lucide-react'
 import { useStore } from '../store'
 import { chaptersForLevel, papersForLevel } from '../data/curriculum'
+import { questions } from '../data/questions'
+import { flashcards } from '../data/flashcards'
 import { Card, Tappable, Button } from '../components/ui'
 import { BottomSheet } from '../components/BottomSheet'
 import { FlashcardsDue } from './FlashcardsDue'
 import { FormulaSheet } from './FormulaSheet'
 import { Glossary } from './Glossary'
 import { StageTestOverlay } from './StageTestOverlay'
+import { QuizOverlay, QuizMode, DifficultyFilter } from '../components/QuizOverlay'
 import { PracticeSession, SessionConfig } from '../components/PracticeSession'
+import { computeRevisionData, todayStr } from '../lib/mastery'
 import { EXAM_TERMS, FOUNDATION_MCQ_BANK, hasPastPapers, pastPaperUrl } from '../data/pastPapers'
 import { color, border, shadow } from '../theme'
 
 export function Practice() {
   const nav = useNavigate()
-  const [sheet, setSheet] = useState<'none' | 'flashcards' | 'formulas' | 'glossary' | 'stage' | 'setup'>('none')
+  const [params] = useSearchParams()
+  const [sheet, setSheet] = useState<'none' | 'flashcards' | 'formulas' | 'glossary' | 'stage' | 'setup' | 'smart'>('none')
   const [activeTest, setActiveTest] = useState<{ paperId: number; grand: boolean } | null>(null)
-  
+
+  // Smart quiz overlay state
+  const [smartQuiz, setSmartQuiz] = useState<{ mode: QuizMode; difficulty: DifficultyFilter; timed: boolean } | null>(null)
+  const [smartMode, setSmartMode] = useState<QuizMode>('weak')
+  const [smartDifficulty, setSmartDifficulty] = useState<DifficultyFilter>('all')
+  const [smartTimed, setSmartTimed] = useState(false)
+
   // Practice Exam Setup State
   const [sessionConfig, setSessionConfig] = useState<SessionConfig | null>(null)
   const [setupPaperId, setSetupPaperId] = useState<number | null>(null)
@@ -27,8 +38,36 @@ export function Practice() {
   const [setupMinutes, setSetupMinutes] = useState<number>(120)
 
   const level = useStore((s) => s.level)
+  const progress = useStore((s) => s.progress)
+  const qp = useStore((s) => s.qp)
+  const srs = useStore((s) => s.srs)
   const papers = papersForLevel(level).filter((p) => chaptersForLevel(level).some((c) => c.paperId === p.id))
   const setupTerm = EXAM_TERMS.find((t) => t.id === setupTermId) ?? EXAM_TERMS[0]
+
+  // Revision hub summary (drives the counters shown on the Practice screen).
+  const revision = useMemo(
+    () => computeRevisionData(level, chaptersForLevel(level), progress, new Map(Object.entries(qp)), new Map(Object.entries(srs)), questions, flashcards, todayStr()),
+    [level, progress, qp, srs],
+  )
+
+  // Handle deep links from the Home dashboard: ?mode=weak / ?deck=due
+  useEffect(() => {
+    const mode = params.get('mode')
+    const deck = params.get('deck')
+    if (mode === 'weak') {
+      setSmartMode('weak')
+      setSheet('smart')
+      window.history.replaceState({}, '', '/practice')
+    } else if (deck === 'due') {
+      setSheet('flashcards')
+      window.history.replaceState({}, '', '/practice')
+    }
+  }, [params])
+
+  const startSmart = () => {
+    setSmartQuiz({ mode: smartMode, difficulty: smartDifficulty, timed: smartTimed })
+    setSheet('none')
+  }
 
   const tiles = [
     { key: 'flashcards' as const, icon: CreditCard, tint: color.secondaryTint, iconColor: color.secondary, title: 'Flashcards', desc: 'Spaced repetition drills' },
@@ -70,7 +109,39 @@ export function Practice() {
         <div style={{ color: color.muted, fontSize: 14, marginTop: 2, fontWeight: 600 }}>Drill, test, and revise.</div>
       </div>
       <div style={{ flex: 1, padding: 16, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }} className="safe-bottom">
-        
+
+        {/* ===== SMART SESSIONS (V2) ===== */}
+        <Card style={{ padding: 18, background: color.secondaryTint, border: border.thick }} onClick={() => { setSmartMode('weak'); setSheet('smart') }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 10, background: color.secondary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: border.thin }}>
+              <Brain size={22} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 900, fontSize: 17 }}>Smart Quiz</div>
+              <div style={{ color: color.text, fontSize: 13, fontWeight: 600, opacity: 0.8 }}>The engine picks what you need most</div>
+            </div>
+            <ArrowRight size={18} color={color.secondary} />
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <MiniStat icon={<AlertTriangle size={13} color={color.danger} />} label="Weak" value={`${revision.weakQuestions.length}`} />
+            <MiniStat icon={<RefreshCw size={13} color={color.warning} />} label="Mistakes" value={`${revision.previousMistakes.length}`} />
+            <MiniStat icon={<Target size={13} color={color.secondary} />} label="Cards due" value={`${revision.dueFlashcards.length}`} />
+          </div>
+        </Card>
+
+        {/* ===== REVISION HUB ===== */}
+        <Card style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }} onClick={() => nav('/revision')}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontWeight: 900, fontSize: 15 }}>Revision</div>
+            <span style={{ fontSize: 12, fontWeight: 800, color: color.secondary }}>Open hub →</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            <MiniStat icon={<RefreshCw size={13} color={color.warning} />} label="Due revision" value={`${revision.dueFlashcards.length}`} />
+            <MiniStat icon={<AlertTriangle size={13} color={color.danger} />} label="Weak chapters" value={`${revision.weakChapters.length}`} />
+            <MiniStat icon={<Check size={13} color={color.success} />} label="Done (7d)" value={`${revision.recentlyCompleted.length}`} />
+          </div>
+        </Card>
+
         <Card style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12, background: color.primaryTint, border: border.thick }} onClick={() => setSheet('setup')}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ width: 48, height: 48, borderRadius: 12, background: color.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: border.thin }}>
@@ -99,6 +170,40 @@ export function Practice() {
           })}
         </div>
       </div>
+
+      {/* Smart quiz setup sheet */}
+      <BottomSheet open={sheet === 'smart'} onClose={() => setSheet('none')} title="Smart Quiz">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 4px 16px' }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>Focus</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <ModeRow active={smartMode === 'weak'} title="Weak Questions" desc="The questions you keep getting wrong" onClick={() => setSmartMode('weak')} />
+              <ModeRow active={smartMode === 'mistakes'} title="Previous Mistakes" desc="Everything you have ever answered wrong" onClick={() => setSmartMode('mistakes')} />
+              <ModeRow active={smartMode === 'timed'} title="Timed Quiz" desc="30s per question, mixed difficulty" onClick={() => { setSmartMode('timed'); setSmartTimed(true) }} />
+              <ModeRow active={smartMode === 'practice'} title="Practice (mixed)" desc="A random 15-question warm-up" onClick={() => setSmartMode('practice')} />
+            </div>
+          </div>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>Difficulty (for you)</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(['all', 'easy', 'medium', 'hard'] as DifficultyFilter[]).map((d) => (
+                <Tappable key={d} onClick={() => setSmartDifficulty(d)} style={{ flex: 1, textAlign: 'center', padding: '10px 0', background: smartDifficulty === d ? color.primary : color.card, border: smartDifficulty === d ? border.thick : border.thin, borderRadius: 8, fontWeight: 800, fontSize: 13, textTransform: 'capitalize' }}>{d}</Tappable>
+              ))}
+            </div>
+          </div>
+          {smartMode === 'timed' && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: color.card, border: border.thin, borderRadius: 10, padding: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>30 seconds per question</div>
+              <Tappable onClick={() => setSmartTimed(!smartTimed)} style={{ background: smartTimed ? color.success : color.card, border: border.thin, borderRadius: 20, width: 44, height: 24, position: 'relative' }}>
+                <div style={{ position: 'absolute', top: 2, left: smartTimed ? 22 : 2, width: 18, height: 18, background: '#fff', border: border.thin, borderRadius: '50%', transition: '0.2s' }} />
+              </Tappable>
+            </div>
+          )}
+          <Button variant="primary" onClick={startSmart} style={{ width: '100%' }}>
+            <Play size={18} /> Start Smart Quiz
+          </Button>
+        </div>
+      </BottomSheet>
 
       <BottomSheet open={sheet === 'setup'} onClose={() => setSheet('none')} title="Configure Exam">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 4px 16px' }}>
@@ -218,6 +323,37 @@ export function Practice() {
       </BottomSheet>
 
       {activeTest && <StageTestOverlay paperId={activeTest.paperId} grand={activeTest.grand} level={level} onClose={() => setActiveTest(null)} />}
+      {smartQuiz && (
+        <QuizOverlay
+          pool={questions}
+          mode={smartQuiz.mode}
+          difficulty={smartQuiz.difficulty}
+          timed={smartQuiz.mode === 'timed' ? (smartQuiz.timed ? 30 : null) : null}
+          title={smartQuiz.mode === 'weak' ? 'Weak Questions' : smartQuiz.mode === 'mistakes' ? 'Previous Mistakes' : smartQuiz.mode === 'timed' ? 'Timed Quiz' : 'Practice'}
+          onClose={() => setSmartQuiz(null)}
+        />
+      )}
     </div>
+  )
+}
+
+function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
+  return (
+    <div style={{ flex: 1, background: color.card, border: border.thin, borderRadius: 8, padding: '8px 6px', textAlign: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}>{icon}<span className="mono" style={{ fontWeight: 800, fontSize: 14 }}>{value}</span></div>
+      <div style={{ color: color.muted, fontSize: 10, marginTop: 2, fontWeight: 700 }}>{label}</div>
+    </div>
+  )
+}
+
+function ModeRow({ active, title, desc, onClick }: { active: boolean; title: string; desc: string; onClick: () => void }) {
+  return (
+    <Tappable onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 10, background: active ? color.primaryTint : color.card, border: active ? border.thick : border.thin, borderRadius: 10, boxShadow: shadow.sm, padding: 12, width: '100%', textAlign: 'left' }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 800, fontSize: 14 }}>{title}</div>
+        <div style={{ color: color.muted, fontSize: 12, fontWeight: 600 }}>{desc}</div>
+      </div>
+      {active && <span style={{ color: color.secondary, fontWeight: 900 }}>✓</span>}
+    </Tappable>
   )
 }

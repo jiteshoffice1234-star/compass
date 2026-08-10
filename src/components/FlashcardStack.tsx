@@ -1,25 +1,34 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, RotateCcw } from 'lucide-react'
 import { flashcards } from '../data/flashcards'
 import { useStore } from '../store'
 import { Tappable } from '../components/ui'
-import { color, border, shadow } from '../theme'
+import { cardTier, isCardDue, todayStr } from '../lib/mastery'
+import { color, border, shadow, font } from '../theme'
+
+const GRADES = [
+  { q: 0, label: 'Again', bg: 'dangerTint', fg: 'danger' },
+  { q: 1, label: 'Hard', bg: 'warningTint', fg: 'warning' },
+  { q: 2, label: 'Good', bg: 'secondaryTint', fg: 'secondary' },
+  { q: 3, label: 'Easy', bg: 'successTint', fg: 'success' },
+] as const
 
 export function FlashcardStack({ chapterId }: { chapterId: number }) {
   const cards = useMemo(() => flashcards.filter((f) => f.chapterId === chapterId), [chapterId])
   const reviewFlashcard = useStore((s) => s.reviewFlashcard)
+  const srs = useStore((s) => s.srs)
   const [order, setOrder] = useState(() => cards.map((_, i) => i))
   const [flipped, setFlipped] = useState(false)
   const total = cards.length
   const reviewed = total - order.length
 
   const current = cards[order[0]]
+  const currentSrs = current ? srs[current.id] ?? null : null
 
-  const review = (quality: number) => {
+  const review = (grade: 0 | 1 | 2 | 3) => {
     if (!current) return
-    reviewFlashcard(current.id, quality)
-    setOrder((o) => (quality <= 2 ? [...o.slice(1), o[0]] : o.slice(1)))
+    reviewFlashcard(current.id, grade)
+    setOrder((o) => (grade <= 1 ? [...o.slice(1), o[0]] : o.slice(1)))
     setFlipped(false)
   }
 
@@ -38,13 +47,25 @@ export function FlashcardStack({ chapterId }: { chapterId: number }) {
     )
   }
 
+  const tier = cardTier(currentSrs)
+  const due = isCardDue(currentSrs, todayStr())
+
   return (
     <div>
-      <div className="mono" style={{ color: color.muted, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
+      <div className="mono" style={{ color: color.muted, fontSize: 12, fontWeight: 700, marginBottom: 8, fontFamily: font.mono }}>
         {order.length} LEFT · {reviewed} DONE
       </div>
       <div style={{ height: 8, background: color.card, border: border.thin, borderRadius: 5, overflow: 'hidden', marginBottom: 12 }}>
         <div style={{ height: '100%', width: `${total ? (reviewed / total) * 100 : 0}%`, background: color.secondary, transition: 'width 0.25s' }} />
+      </div>
+      {/* card status chip */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center' }}>
+        <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: 0.8, padding: '3px 8px', borderRadius: 6, border: border.thin, background: tier === 'mastered' ? color.successTint : tier === 'difficult' || tier === 'weak' ? color.warningTint : color.secondaryTint, color: tier === 'mastered' ? color.success : tier === 'difficult' || tier === 'weak' ? color.warning : color.secondary }}>
+          {tier.toUpperCase()}
+        </span>
+        {!due && currentSrs && (
+          <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: color.muted, fontFamily: font.mono }}>due {currentSrs.due}</span>
+        )}
       </div>
       <Tappable onClick={() => setFlipped((f) => !f)} style={{ width: '100%' }}>
         <motion.div
@@ -78,19 +99,21 @@ export function FlashcardStack({ chapterId }: { chapterId: number }) {
       </Tappable>
 
       {flipped && (
-        <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-          <Tappable
-            onClick={() => review(1)}
-            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: color.dangerTint, color: color.danger, border: `3px solid ${color.danger}`, borderRadius: 10, boxShadow: shadow.sm, padding: 14, fontWeight: 800, fontSize: 14 }}
-          >
-            <RotateCcw size={16} /> Review again
-          </Tappable>
-          <Tappable
-            onClick={() => review(5)}
-            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: color.successTint, color: color.success, border: `3px solid ${color.success}`, borderRadius: 10, boxShadow: shadow.sm, padding: 14, fontWeight: 800, fontSize: 14 }}
-          >
-            <Check size={16} /> Got it
-          </Tappable>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16 }}>
+          {GRADES.map((g) => (
+            <Tappable
+              key={g.q}
+              onClick={() => review(g.q)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: color[g.bg], color: color[g.fg], border: `3px solid ${color[g.fg]}`, borderRadius: 10, boxShadow: shadow.sm, padding: 14, fontWeight: 800, fontSize: 14 }}
+            >
+              {g.label}
+            </Tappable>
+          ))}
+        </div>
+      )}
+      {flipped && (
+        <div style={{ marginTop: 8, textAlign: 'center', color: color.muted, fontSize: 11, fontWeight: 600 }}>
+          Again/Hard → shown again soon · Good/Easy → scheduled further out
         </div>
       )}
     </div>
