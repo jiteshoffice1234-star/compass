@@ -129,6 +129,31 @@ export interface MockResultRow {
   data: string          // JSON: { poolIds, answers, marked[], perQSeconds, autoSubmit, startedAt, deadline }
 }
 
+// Phase 5: study planner
+export interface PlannerSettingsRow {
+  id: number
+  level: string
+  paper_ids: string | null  // JSON array of paper ids, null = all papers in level
+  exam_date: string | null  // YYYY-MM-DD
+  days_per_week: number
+  minutes_per_day: number
+  session_length: number
+  set_flag: number
+}
+
+export interface PlannerTaskRow {
+  id: string
+  date: string
+  type: string
+  chapter_id: number | null
+  paper_id: number | null
+  minutes: number
+  detail: string
+  status: string
+  completed_at: string | null
+  actual_minutes: number
+}
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS user_profile (
   id INTEGER PRIMARY KEY DEFAULT 1,
@@ -260,6 +285,29 @@ CREATE TABLE IF NOT EXISTS mock_results (
 CREATE TABLE IF NOT EXISTS revision_flags (
   question_id TEXT PRIMARY KEY,
   created_at TEXT DEFAULT (datetime('now'))
+);
+-- Phase 5: smart study planner
+CREATE TABLE IF NOT EXISTS planner_settings (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  level TEXT DEFAULT 'foundation',
+  paper_ids TEXT,
+  exam_date TEXT,
+  days_per_week INTEGER DEFAULT 5,
+  minutes_per_day INTEGER DEFAULT 60,
+  session_length INTEGER DEFAULT 40,
+  set_flag INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS planner_tasks (
+  id TEXT PRIMARY KEY,
+  date TEXT NOT NULL,
+  type TEXT NOT NULL,
+  chapter_id INTEGER,
+  paper_id INTEGER,
+  minutes INTEGER DEFAULT 0,
+  detail TEXT DEFAULT '',
+  status TEXT DEFAULT 'planned',
+  completed_at TEXT,
+  actual_minutes REAL DEFAULT 0
 );
 `
 

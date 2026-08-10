@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Flame, Search, Play, BookOpen, User, Zap, Target, RefreshCw } from 'lucide-react'
+import { Flame, Search, Play, BookOpen, User, Zap, Target, RefreshCw, Calendar } from 'lucide-react'
 import { useStore } from '../store'
-import { useDailyPlan } from '../store'
+import { useDailyPlan, usePlannerData } from '../store'
 import { chaptersForLevel, papersForLevel, LEVEL_LABELS, chapterById } from '../data/curriculum'
 import { ProgressRing, Card, Tappable, Button } from '../components/ui'
 import { SearchOverlay } from './SearchOverlay'
@@ -19,6 +19,12 @@ export function Home() {
   const name = useStore((s) => s.name)
   const [searchOpen, setSearchOpen] = useState(false)
   const plan = useDailyPlan()
+  const planner = usePlannerData()
+  const plannerNext = planner.todayTasks.find((t) => t.status === 'planned' || t.status === 'inprogress')
+  const plannerMins = planner.todayTasks.reduce((s, t) => s + t.minutes, 0)
+  const plannerCountdown = planner.settings.set
+    ? planner.overview.daysUntil === null ? 'No exam date' : planner.overview.daysUntil <= 0 ? 'Exam passed' : `Exam in ${planner.overview.daysUntil}d`
+    : null
 
   const levelChapters = useMemo(() => chaptersForLevel(level).sort((a, b) => a.id - b.id), [level])
   const firstChapter = levelChapters[0]
@@ -82,6 +88,33 @@ export function Home() {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }} className="safe-bottom">
+        {/* ===== PLANNER STRIP (Phase 5) ===== */}
+        <Tappable onClick={() => nav('/planner')} style={{ display: 'flex', alignItems: 'center', gap: 10, background: color.card, border: border.thick, boxShadow: shadow.sm, borderRadius: 12, padding: '12px 14px', marginBottom: 16, width: '100%', textAlign: 'left' }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: planner.settings.set ? color.warningTint : color.primaryTint, color: planner.settings.set ? color.warning : color.primary, border: border.thin, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Calendar size={19} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {planner.settings.set ? (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 900 }}>📅 {plannerCountdown} · {fmtPlannerMins(plannerMins)} planned today</div>
+                <div style={{ color: color.muted, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {plannerNext ? `Next: ${plannerNext.detail} (${plannerNext.minutes}m)` : 'Today’s plan complete 🎉'}
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 900 }}>📅 Smart Study Planner</div>
+                <div style={{ color: color.muted, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  Set your exam date & daily time — get an adaptive daily plan
+                </div>
+              </>
+            )}
+          </div>
+          <span style={{ background: color.primary, color: color.primaryInk, borderRadius: 6, padding: '6px 10px', fontSize: 11, fontWeight: 900, flexShrink: 0 }}>
+            {planner.settings.set ? (plannerNext ? 'START' : 'OPEN') : 'SET UP'}
+          </span>
+        </Tappable>
+
         {/* ===== TODAY'S PLAN ===== */}
         <Card style={{ padding: 16, marginBottom: 16, background: color.primaryTint }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -223,6 +256,11 @@ export function Home() {
       {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} />}
     </div>
   )
+}
+
+function fmtPlannerMins(m: number): string {
+  if (m <= 0) return 'No tasks'
+  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`
 }
 
 function PlanStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {

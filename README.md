@@ -98,6 +98,19 @@ CMA students in India face a fragmented study experience:
 - **Formula Sheet** — all formulas, searchable
 - **Glossary** — 150+ CMA terms, A–Z
 
+### Smart Study Planner (V2.4)
+- **Setup flow** — pick your level, papers, exam date, study days/week and minutes/day (editable anytime)
+- **Adaptive daily plan** — answers *“what should I study today?”* using the Mastery Engine: weak chapters and mock failures outrank new chapters (new ≠ weak), partially-mastered chapters and due flashcards in the middle, strong/recently-active chapters last
+- **Exam countdown + phase logic** — Learning → Practice → Revision → Final sprint as the exam approaches, with transparent phase-based task mixes (no arbitrary percentages)
+- **Budget-respecting** — the daily plan always fits inside your available minutes (trims low-priority tasks, never silently overloads), and study days/week are respected in the weekly plan
+- **Task types** — Learn, Practice, Revision (launches Phase 3 Smart Revision), Flashcards (SRS due), Review Mistakes, and Mock (Phase 4) — every task launches the existing system, nothing duplicated
+- **Real completion tracking** — a quiz/revision/flashcard/mock task completes when you actually finish that activity (start/end timestamps), not by tapping a checkbox; missed tasks are redistributed, not piled up
+- **This Week** — planned vs completed hours (from real study activity), per-paper progress, and upcoming days
+- **Warnings only when real** — “N chapters need revision” and an honest pacing check (remaining syllabus vs capacity before the exam)
+- **REPLAN** — regenerates the future schedule from the latest mastery/revision/mock data without erasing completed history
+- **Home strip** — compact 📅 countdown + today's plan + **START** on Home
+- Planner settings and tasks persist locally; fully offline
+
 ### Profile & Badges
 - **XP progress bar** — track your level progression (Beginner → Expert)
 - **Day streak** — consecutive study days

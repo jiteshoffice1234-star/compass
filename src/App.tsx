@@ -12,6 +12,7 @@ import { Practice } from './screens/Practice'
 import { Profile } from './screens/Profile'
 import { Revision } from './screens/Revision'
 import { MockHistory } from './screens/MockHistory'
+import { Planner } from './screens/Planner'
 import { Onboarding } from './screens/Onboarding'
 import { BottomNav } from './components/BottomNav'
 import { Toast } from './components/Toast'
@@ -69,6 +70,7 @@ function AppContent() {
             <Route path="/practice" element={<Practice />} />
             <Route path="/revision" element={<Revision />} />
             <Route path="/mocks" element={<MockHistory />} />
+            <Route path="/planner" element={<Planner />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/pdf" element={<PdfViewer />} />
           </Routes>

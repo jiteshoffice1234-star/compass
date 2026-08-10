@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { curriculum, Level, chaptersForLevel, chaptersForPaper, papersForLevel, chapterById } from '../data/curriculum'
 import { questions as allQuestions } from '../data/questions'
@@ -23,6 +24,14 @@ import {
   checkMilestones, computeDailyPlan, computeMasterySummary,
 } from '../lib/mastery'
 import type { DailyPlan, MasterySummary } from '../lib/mastery'
+import {
+  getPlannerSettings as dbGetPlannerSettings,
+  savePlannerSettings as dbSavePlannerSettings,
+  getPlannerTasks, savePlannerTasks, clearFuturePlannerTasks, PlannerSettings, PlannerTask,
+} from '../lib/plannerStore'
+import { getMockResults, getRecentDailyStats } from '../lib/store'
+import { computeWeekPlan, computeChapterPlanInfos, computePlannerCounts, computePlannerOverview, computeWeekActuals, computeDailyPlanTasks, todayStr as plannerToday, PlanInputs } from '../lib/planner'
+import type { MockResultRow } from '../lib/db'
 
 export type ThemeMode = ThemeId
 
@@ -70,6 +79,9 @@ export interface AppState {
   daily: DailyStatsRow | null
   milestones: Record<string, boolean>
   bests: Record<string, PersonalBestRow>
+  // ---- Phase 5: smart study planner ----
+  plannerSettings: PlannerSettings
+  plannerTasks: Record<string, PlannerTask>
   levelUp: { name: string } | null
   badgeUnlock: { id: string; name: string } | null
   milestoneUnlock: { name: string } | null
@@ -94,6 +106,13 @@ export interface AppState {
   resetProgress: () => Promise<void>
   refreshProgress: () => Promise<void>
   bumpWeeklyProgress: (n: number) => Promise<void>
+  // ---- Phase 5: planner ----
+  savePlannerSettings: (settings: PlannerSettings) => Promise<void>
+  replan: () => Promise<void>
+  ensurePlannerPlan: () => Promise<void>
+  startPlannerTask: (id: string) => Promise<void>
+  completePlannerTask: (id: string, actualMinutes?: number) => Promise<void>
+  skipPlannerTask: (id: string) => Promise<void>
   showToast: (msg: string) => void
   clearToast: () => void
   dismissLevelUp: () => void
@@ -124,6 +143,8 @@ export const useStore = create<AppState>((set, get) => ({
   daily: null,
   milestones: {},
   bests: {},
+  plannerSettings: { level: 'foundation', paperIds: null, examDate: null, daysPerWeek: 5, minutesPerDay: 60, sessionLength: 40, set: false },
+  plannerTasks: {},
   levelUp: null,
   badgeUnlock: null,
   milestoneUnlock: null,
@@ -158,6 +179,12 @@ export const useStore = create<AppState>((set, get) => ({
       const bests: Record<string, PersonalBestRow> = {}
       bestRows.forEach((b) => (bests[b.key] = b))
 
+      // ---- Phase 5: planner state ----
+      const plannerSettings = await dbGetPlannerSettings()
+      const pRows = await getPlannerTasks()
+      const plannerTasks: Record<string, PlannerTask> = {}
+      pRows.forEach((t) => (plannerTasks[t.id] = t))
+
       const ws = weekStartStr()
       let weekly = await getWeeklyChallenge()
       if (!weekly || weekly.week_start !== ws) {
@@ -184,9 +211,11 @@ export const useStore = create<AppState>((set, get) => ({
         weeklyChallengeId: weekly.challenge_id,
         weeklyProgress: weekly.progress,
         weeklyCompleted: weekly.completed,
-        qp, srs, daily, milestones, bests,
+        qp, srs, daily, milestones, bests, plannerSettings, plannerTasks,
       })
       document.documentElement.setAttribute('data-theme', normalizeTheme(profile.ui_mode))
+      // Planner: generate today's plan (async, non-blocking) for configured users.
+      void get().ensurePlannerPlan()
     } catch (error) {
       console.error('[Store] Init failed:', error)
       set({ ready: true })
@@ -317,6 +346,9 @@ export const useStore = create<AppState>((set, get) => ({
       await recordQuizSession({ mode, chapter_id: chapterId, score, total, seconds: seconds ?? 0 })
       await bumpCumulative(get, set, isTest ? 'cum_tests' : 'cum_quizzes', 1)
       if (revisionMode) await bumpCumulative(get, set, 'cum_revisions', 1)
+      // Phase 5: connect real activity to the planner (quiz → practice/learn,
+      // revision → revision, mistakes/weak → mistakes, mock → mock).
+      void syncPlannerActivity(get, set, { mode, chapterId, seconds, attempts })
 
       // ---- 3. XP: correct answers (+revision bonus), pass bonuses ----
       let xpGained = 0
@@ -430,6 +462,8 @@ export const useStore = create<AppState>((set, get) => ({
       await get().bumpWeeklyProgress(1)
       await unlockMilestones(get, set)
       await checkDailyGoalReward(get, set, daily)
+      // Phase 5: flashcard review completes today's flashcards task.
+      void syncPlannerActivity(get, set, { mode: 'flashcard', chapterId: null, seconds: 30, attempts: [] })
     } catch (error) {
       console.error('[Store] Failed to review flashcard:', error, { flashcardId })
     }
@@ -550,6 +584,92 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('[Store] Weekly progress update failed:', error)
     }
+  },
+
+  // -------------------------------------------------------------------------
+  // Phase 5: Smart Study Planner
+  // -------------------------------------------------------------------------
+  savePlannerSettings: async (settings) => {
+    await dbSavePlannerSettings(settings)
+    set({ plannerSettings: settings })
+    await get().replan()
+  },
+
+  replan: async () => {
+    try {
+      const s = get().plannerSettings
+      if (!s.set) return
+      const today = plannerToday()
+      const existing = { ...get().plannerTasks }
+      // Missed days: past planned tasks become 'skipped' (honest history), then
+      // the scheduler reprioritises unfinished weak chapters — no fake backlog.
+      for (const t of Object.values(existing)) {
+        if (t.date < today && (t.status === 'planned' || t.status === 'inprogress')) {
+          existing[t.id] = { ...t, status: 'skipped', completedAt: new Date().toISOString() }
+        }
+      }
+      await clearFuturePlannerTasks(today)
+      const mockRows = await getMockResults(10)
+      const inputs: PlanInputs = {
+        settings: s,
+        chapters: curriculum,
+        progress: get().progress,
+        perfByQ: new Map(Object.entries(get().qp)),
+        srsByCard: new Map(Object.entries(get().srs)),
+        questions: allQuestions,
+        flashcards: allFlashcards,
+        mockRows,
+        today,
+      }
+      const week = computeWeekPlan(inputs)
+      for (const t of week.tasks) if (t.date >= today) existing[t.id] = t
+      // Remove stale future tasks that the fresh plan no longer contains
+      // (e.g. a task type dropped by the budget trim) — but never touch
+      // completed/skipped history.
+      const newIds = new Set(week.tasks.map((t) => t.id))
+      for (const t of Object.values(existing)) {
+        if (t.date >= today && !newIds.has(t.id) && (t.status === 'planned' || t.status === 'inprogress')) {
+          delete existing[t.id]
+        }
+      }
+      await savePlannerTasks(Object.values(existing))
+      set({ plannerTasks: existing })
+    } catch (error) {
+      console.error('[Planner] Replan failed:', error)
+    }
+  },
+
+  ensurePlannerPlan: async () => {
+    const s = get().plannerSettings
+    if (!s.set) return
+    const today = plannerToday()
+    const hasToday = Object.values(get().plannerTasks).some((t) => t.date === today && (t.status === 'planned' || t.status === 'inprogress'))
+    if (hasToday) return
+    await get().replan()
+  },
+
+  startPlannerTask: async (id) => {
+    const t = get().plannerTasks[id]
+    if (!t || t.status === 'done' || t.status === 'skipped') return
+    const next = { ...get().plannerTasks, [id]: { ...t, status: 'inprogress' as const } }
+    set({ plannerTasks: next })
+    await savePlannerTasks([next[id]])
+  },
+
+  completePlannerTask: async (id, actualMinutes) => {
+    const t = get().plannerTasks[id]
+    if (!t || t.status === 'done' || t.status === 'skipped') return
+    const next = { ...get().plannerTasks, [id]: { ...t, status: 'done' as const, completedAt: new Date().toISOString(), actualMinutes: actualMinutes ?? Math.max(1, t.minutes) } }
+    set({ plannerTasks: next })
+    await savePlannerTasks([next[id]])
+  },
+
+  skipPlannerTask: async (id) => {
+    const t = get().plannerTasks[id]
+    if (!t || t.status === 'done' || t.status === 'skipped') return
+    const next = { ...get().plannerTasks, [id]: { ...t, status: 'skipped' as const, completedAt: new Date().toISOString() } }
+    set({ plannerTasks: next })
+    await savePlannerTasks([next[id]])
   },
 
   showToast: (msg) => {
@@ -785,3 +905,93 @@ async function bumpCumulative(get: () => AppState, set: (p: Partial<AppState>) =
   const bests = { ...get().bests, [key]: row }
   set({ bests })
 }
+
+/** Connect real activity to today's planner tasks. Completion is driven by
+ *  actual study (quiz/revision/mock/flashcard sessions), not by tapping a
+ *  fake "Done" button. */
+async function syncPlannerActivity(
+  get: () => AppState,
+  set: (p: Partial<AppState>) => void,
+  ctx: { mode: string; chapterId: number | null; seconds?: number; attempts?: { q: string; correct: boolean }[] },
+): Promise<void> {
+  try {
+    if (!get().plannerSettings.set) return
+    const today = plannerToday()
+    const tasks = { ...get().plannerTasks }
+    const actual = ctx.seconds && ctx.seconds > 0
+      ? Math.max(1, Math.round(ctx.seconds / 60))
+      : ctx.attempts && ctx.attempts.length > 0
+        ? Math.max(1, Math.round(ctx.attempts.length * 0.75))
+        : 1
+    const ids: string[] = []
+    if (ctx.mode === 'mock') ids.push(`${today}|mock|all`)
+    else if (ctx.mode === 'revision') ids.push(`${today}|revision|all`, ...Object.keys(tasks).filter((k) => k.startsWith(`${today}|revision|`)))
+    else if (ctx.mode === 'weak' || ctx.mode === 'mistakes') ids.push(`${today}|mistakes|all`)
+    else if (ctx.mode === 'flashcard') ids.push(`${today}|flashcards|all`)
+    else ids.push(`${today}|practice|${ctx.chapterId ?? ''}`, ...Object.keys(tasks).filter((k) => k.startsWith(`${today}|practice|`)))
+
+    let changed = false
+    for (const id of ids) {
+      const t = tasks[id]
+      if (!t || t.status === 'done' || t.status === 'skipped') continue
+      tasks[id] = { ...t, status: 'done', completedAt: new Date().toISOString(), actualMinutes: actual }
+      changed = true
+    }
+    if (changed) {
+      set({ plannerTasks: tasks })
+      await savePlannerTasks(Object.values(tasks).filter((t) => ids.includes(t.id)))
+    }
+  } catch (error) {
+    console.error('[Planner] Activity sync failed:', error)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Planner data hook — memoised derivation for the Planner screen + Home.
+// ---------------------------------------------------------------------------
+
+export function usePlannerData() {
+  const settings = useStore((s) => s.plannerSettings)
+  const plannerTasks = useStore((s) => s.plannerTasks)
+  const progress = useStore((s) => s.progress)
+  const qp = useStore((s) => s.qp)
+  const srs = useStore((s) => s.srs)
+  const [mockRows, setMockRows] = useState<MockResultRow[]>([])
+  const [dailyRows, setDailyRows] = useState<DailyStatsRow[]>([])
+  useEffect(() => {
+    getMockResults(10).then(setMockRows).catch(() => {})
+    getRecentDailyStats(7).then(setDailyRows).catch(() => {})
+  }, [])
+
+  const today = plannerToday()
+  const inputs = useMemo<PlanInputs>(() => ({
+    settings,
+    chapters: curriculum,
+    progress,
+    perfByQ: new Map(Object.entries(qp)),
+    srsByCard: new Map(Object.entries(srs)),
+    questions: allQuestions,
+    flashcards: allFlashcards,
+    mockRows,
+    today,
+  }), [settings, progress, qp, srs, mockRows, today])
+
+  const weekPlan = useMemo(() => (settings.set ? computeWeekPlan(inputs) : { tasks: [], days: [], plannedMinutes: 0 }), [inputs, settings.set])
+  const infos = useMemo(() => (settings.set ? computeChapterPlanInfos(settings, curriculum, progress, new Map(Object.entries(qp)), new Map(Object.entries(srs)), allFlashcards, new Map(), today) : []), [settings, progress, qp, srs, today])
+  const counts = useMemo(() => (settings.set ? computePlannerCounts(settings, curriculum, new Map(Object.entries(qp)), new Map(Object.entries(srs)), allQuestions, allFlashcards, infos, today) : { dueCards: 0, weakQuestions: 0, mistakes: 0, weakestChapterId: null, weakestChapterTitle: null, unfinishedCount: 0 }), [settings, qp, srs, infos, today])
+  const overview = useMemo(() => (settings.set ? computePlannerOverview(inputs, infos, weekPlan) : { phase: 'learning' as const, daysUntil: null, phaseLabel: 'Learning phase', unfinishedCount: 0, weakRevisionCount: 0, warnings: [] }), [inputs, infos, weekPlan, settings.set])
+  const weekActuals = useMemo(() => (settings.set ? computeWeekActuals(weekPlan, dailyRows, today) : { plannedMinutes: 0, completedMinutes: 0, percent: 0 }), [weekPlan, dailyRows, today, settings.set])
+
+  // Today's tasks: the stored ones (with real statuses), falling back to a
+  // freshly computed preview if the plan hasn't been persisted yet.
+  const todayTasks = useMemo(() => {
+    const stored = Object.values(plannerTasks).filter((t) => t.date === today).sort((a, b) => TASK_ORDER[a.type] - TASK_ORDER[b.type])
+    if (stored.length > 0) return stored
+    if (!settings.set) return []
+    return computeDailyPlanTasks(inputs, infos, counts)
+  }, [plannerTasks, today, settings.set, inputs, infos, counts])
+
+  return { settings, todayTasks, weekPlan, infos, counts, overview, weekActuals }
+}
+
+const TASK_ORDER: Record<string, number> = { learn: 0, practice: 1, revision: 2, mock: 3, flashcards: 4, mistakes: 5 }
