@@ -371,7 +371,7 @@ export function Profile() {
 function sessionLabel(mode: string): string {
   const map: Record<string, string> = {
     chapter: 'Chapter Quiz', chapter_test: 'Chapter Test', weak: 'Weak Questions',
-    mistakes: 'Previous Mistakes', timed: 'Timed Quiz', practice: 'Practice',
+    mistakes: 'Previous Mistakes', revision: 'Revision', timed: 'Timed Quiz', practice: 'Practice',
     paper: 'Paper Test', mock: 'Mock Exam', grand: 'Grand Final',
   }
   return map[mode] ?? 'Quiz'

@@ -118,6 +118,17 @@ export function Home() {
               )}
             </Tappable>
           )}
+          {plan.recommendedMastery !== null && plan.recommendedMastery < 0.6 && recommended && (
+            <Tappable onClick={() => nav('/revision')} style={{ display: 'flex', alignItems: 'center', gap: 8, background: color.dangerTint, border: border.thin, borderRadius: 8, padding: '8px 10px', marginTop: 10, width: '100%', textAlign: 'left' }}>
+              <span style={{ fontSize: 14 }}>🔴</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: 0.6, color: color.danger }}>TODAY'S PRIORITY · REVISE</div>
+                <div style={{ fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Ch {recommended.id}: {recommended.title}</div>
+              </div>
+              <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: color.danger, fontFamily: font.mono }}>{Math.round(plan.recommendedMastery * 100)}%</span>
+              <span style={{ background: color.danger, color: '#fff', borderRadius: 6, padding: '5px 10px', fontSize: 11, fontWeight: 800 }}>START</span>
+            </Tappable>
+          )}
           <Button variant="primary" onClick={startStudying} style={{ marginTop: 12, width: '100%' }}>
             <Play size={18} /> Start Studying
           </Button>

@@ -3,7 +3,8 @@ import { motion } from 'framer-motion'
 import { flashcards } from '../data/flashcards'
 import { useStore } from '../store'
 import { Tappable } from '../components/ui'
-import { cardTier, isCardDue, todayStr } from '../lib/mastery'
+import { cardTier, isCardDue, todayStr, SrsGrade } from '../lib/mastery'
+import type { Flashcard } from '../data/flashcards'
 import { color, border, shadow, font } from '../theme'
 
 const GRADES = [
@@ -13,27 +14,28 @@ const GRADES = [
   { q: 3, label: 'Easy', bg: 'successTint', fg: 'success' },
 ] as const
 
-export function FlashcardStack({ chapterId }: { chapterId: number }) {
-  const cards = useMemo(() => flashcards.filter((f) => f.chapterId === chapterId), [chapterId])
+export function FlashcardStack({ chapterId, cards: cardsProp, onReview }: { chapterId: number; cards?: Flashcard[]; onReview?: (id: string, grade: SrsGrade) => void }) {
+  const deck = useMemo(() => cardsProp ?? flashcards.filter((f) => f.chapterId === chapterId), [cardsProp, chapterId])
   const reviewFlashcard = useStore((s) => s.reviewFlashcard)
   const srs = useStore((s) => s.srs)
-  const [order, setOrder] = useState(() => cards.map((_, i) => i))
+  const [order, setOrder] = useState(() => deck.map((_, i) => i))
   const [flipped, setFlipped] = useState(false)
-  const total = cards.length
+  const total = deck.length
   const reviewed = total - order.length
 
-  const current = cards[order[0]]
+  const current = deck[order[0]]
   const currentSrs = current ? srs[current.id] ?? null : null
 
-  const review = (grade: 0 | 1 | 2 | 3) => {
+  const review = (grade: SrsGrade) => {
     if (!current) return
     reviewFlashcard(current.id, grade)
+    onReview?.(current.id, grade)
     setOrder((o) => (grade <= 1 ? [...o.slice(1), o[0]] : o.slice(1)))
     setFlipped(false)
   }
 
   const restart = () => {
-    setOrder(cards.map((_, i) => i))
+    setOrder(deck.map((_, i) => i))
     setFlipped(false)
   }
 

@@ -13,7 +13,7 @@
 
 import { Question } from '../data/questions'
 import { Flashcard } from '../data/flashcards'
-import { Chapter, Level, Paper, chaptersForLevel, papersForLevel } from '../data/curriculum'
+import { Chapter, Level, Paper, chaptersForLevel, papersForLevel, chapterById } from '../data/curriculum'
 import type {
   QuestionPerfRow,
   FlashcardSrsRow,
@@ -848,6 +848,230 @@ export function computeRevisionData(
   chaptersDueRevision.sort((a, b) => (a.overall ?? 1) - (b.overall ?? 1))
 
   return { dueFlashcards, weakQuestions, previousMistakes, difficultFlashcards, recentlyCompleted, weakChapters, chaptersDueRevision }
+}
+
+// ---------------------------------------------------------------------------
+// Targeted revision engine (Phase 3)
+// ---------------------------------------------------------------------------
+// computeTargetedSession builds a focused question+flashcard session for ONE
+// weak area from REAL stored performance. Selection is deterministic:
+// touched questions rank by a revision score (repeated mistakes > low personal
+// accuracy > recently-failed > hard-for-you); untouched questions only fill
+// when the chapter genuinely has little data. Difficult/weak/due cards rank
+// above unseen ones. Unrelated chapters are never mixed in.
+
+export type RevisionMode = 'quick' | 'deep' | 'wrong' | 'cards' | 'weakest'
+
+export interface RevisionTarget {
+  chapterId: number
+  chapterTitle: string
+  mode: RevisionMode
+  questionIds: string[]
+  cardIds: string[]
+  reasons: string[]
+  estimated: { questions: number; cards: number }
+}
+
+const REVISION_SIZES: Record<RevisionMode, { q: number; fc: number }> = {
+  quick: { q: 10, fc: 5 },
+  deep: { q: 20, fc: 10 },
+  wrong: { q: 20, fc: 5 },
+  cards: { q: 0, fc: 15 },
+  weakest: { q: 10, fc: 5 },
+}
+
+/** How urgently THIS question needs revision: repeated mistakes weigh most,
+ *  a recently-failed question outranks stale evidence, hard-for-you adds
+ *  weight. Untouched questions score 0 — new is not weak. */
+export function revisionQuestionScore(p: QuestionPerfRow | null, today: string): number {
+  if (!p) return 0
+  const total = p.correct + p.wrong
+  if (total === 0) return 0
+  let s = weaknessScore(p)
+  if (p.last_seen) {
+    const d = daysBetween(p.last_seen, today)
+    if (d <= 7 && p.last_result === 0) s += 1.5 // just failed → urgent
+    else if (d <= 7 && p.last_result === 1) s += 0.5
+    else if (d > 14) s -= 0.5 // stale → less urgent than fresh failures
+  }
+  if (difficultyOf(p) === 'hard') s += 0.5
+  return Math.max(0, s)
+}
+
+/** Flashcard priority: difficult > weak > due > seen-but-not-due > unseen. */
+export function cardRevisionPriority(srs: FlashcardSrsRow | null, today: string): number {
+  if (!srs) return 0.2
+  const t = cardTier(srs)
+  if (t === 'difficult') return 3
+  if (t === 'weak') return 2
+  if (t === 'mastered') return 0
+  return isCardDue(srs, today) ? 1 : 0.3
+}
+
+export function computeTargetedSession(
+  chapterId: number,
+  mode: RevisionMode,
+  perfByQ: Map<string, QuestionPerfRow>,
+  srsByCard: Map<string, FlashcardSrsRow>,
+  questions: Question[],
+  flashcards: Flashcard[],
+  today: string,
+): RevisionTarget {
+  const chapter = chapterById(chapterId)
+  const chapterQs = questions.filter((q) => q.chapterId === chapterId)
+  const chapterCards = flashcards.filter((f) => f.chapterId === chapterId)
+
+  const scoredQs = chapterQs
+    .map((q) => ({ q, s: revisionQuestionScore(perfByQ.get(q.id) ?? null, today) }))
+    .sort((a, b) => b.s - a.s)
+  const scoredCards = chapterCards
+    .map((c) => ({ c, s: cardRevisionPriority(srsByCard.get(c.id) ?? null, today) }))
+    .sort((a, b) => b.s - a.s)
+
+  const size = REVISION_SIZES[mode]
+
+  let qSel: Question[]
+  let cSel: Flashcard[]
+  if (mode === 'wrong') {
+    qSel = scoredQs.filter((x) => isPreviousMistake(perfByQ.get(x.q.id) ?? null)).slice(0, size.q).map((x) => x.q)
+    cSel = scoredCards.filter((x) => x.s >= 2).slice(0, size.fc).map((x) => x.c)
+  } else if (mode === 'cards') {
+    qSel = []
+    cSel = scoredCards.filter((x) => x.s >= 2).slice(0, size.fc).map((x) => x.c)
+  } else {
+    qSel = scoredQs.slice(0, size.q).map((x) => x.q)
+    cSel = scoredCards.slice(0, size.fc).map((x) => x.c)
+  }
+
+  // Graceful fill — never an empty/broken session: top up from the chapter.
+  // "Wrong Answers" is the exception: it must stay strictly within previously-
+  // missed questions (a few fewer is better than padding with unseen ones).
+  if (mode !== 'wrong' && qSel.length < size.q && qSel.length < chapterQs.length) {
+    qSel = scoredQs.slice(0, Math.min(size.q, chapterQs.length)).map((x) => x.q)
+  }
+  if (mode !== 'cards' && cSel.length < Math.min(size.fc, 5) && chapterCards.length > 0) {
+    cSel = scoredCards.slice(0, Math.min(size.fc, chapterCards.length)).map((x) => x.c)
+  }
+
+  const mistakes = scoredQs.filter((x) => isPreviousMistake(perfByQ.get(x.q.id) ?? null)).length
+  const weakQs = scoredQs.filter((x) => isWeakQuestion(perfByQ.get(x.q.id) ?? null)).length
+  const difficultCards = scoredCards.filter((x) => x.s >= 2).length
+  const dueCards = scoredCards.filter((x) => x.s === 1).length
+
+  const reasons: string[] = []
+  if (mode === 'wrong') reasons.push('Only previously-missed questions')
+  if (mode === 'cards') reasons.push('Only difficult/weak cards')
+  if (mistakes > 0) reasons.push(`${mistakes} repeated mistake${mistakes > 1 ? 's' : ''}`)
+  if (weakQs > 0 && mode !== 'wrong') reasons.push(`${weakQs} weak question${weakQs > 1 ? 's' : ''}`)
+  if (difficultCards > 0) reasons.push(`${difficultCards} difficult card${difficultCards > 1 ? 's' : ''}`)
+  if (dueCards > 0) reasons.push(`${dueCards} card${dueCards > 1 ? 's' : ''} due`)
+
+  return {
+    chapterId,
+    chapterTitle: chapter?.title ?? `Chapter ${chapterId}`,
+    mode,
+    questionIds: qSel.map((q) => q.id),
+    cardIds: cSel.map((c) => c.id),
+    reasons,
+    estimated: { questions: qSel.length, cards: cSel.length },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Revision areas — the hub's view of the whole level, one grouped pass.
+// ---------------------------------------------------------------------------
+export interface RevisionAreaDetails {
+  chapterId: number
+  status: Status
+  overall: number | null
+  accuracy: number | null
+  mistakes: number
+  weakQs: number
+  difficultCards: number
+  dueCards: number
+  recentAccuracy: number | null
+  improving: boolean
+}
+
+export interface RevisionAreas {
+  byChapter: Map<number, RevisionAreaDetails>
+  weakest: RevisionAreaDetails | null
+  needsRevision: RevisionAreaDetails[]
+  improving: RevisionAreaDetails[]
+}
+
+export function computeRevisionAreas(
+  level: Level,
+  chapters: Chapter[],
+  progress: Record<number, ChapterProgressRow>,
+  perfByQ: Map<string, QuestionPerfRow>,
+  srsByCard: Map<string, FlashcardSrsRow>,
+  questions: Question[],
+  flashcards: Flashcard[],
+  today: string,
+): RevisionAreas {
+  const levelChapters = chapters.filter((c) => c.level === level)
+  const ids = new Set(levelChapters.map((c) => c.id))
+  const todayMs = new Date(today + 'T00:00:00').getTime()
+
+  const mistakes = new Map<number, number>()
+  const weakQs = new Map<number, number>()
+  const recentRows = new Map<number, { correct: number; total: number }>()
+  for (const q of questions) {
+    const p = perfByQ.get(q.id)
+    if (!p || !ids.has(p.chapter_id)) continue
+    if (p.wrong >= 1) mistakes.set(p.chapter_id, (mistakes.get(p.chapter_id) ?? 0) + 1)
+    if (isWeakQuestion(p)) weakQs.set(p.chapter_id, (weakQs.get(p.chapter_id) ?? 0) + 1)
+    if (p.last_seen) {
+      const d = Math.round((todayMs - new Date(p.last_seen.slice(0, 10) + 'T00:00:00').getTime()) / 86400000)
+      if (d >= 0 && d <= 7) {
+        const r = recentRows.get(p.chapter_id) ?? { correct: 0, total: 0 }
+        r.correct += p.correct
+        r.total += p.correct + p.wrong
+        recentRows.set(p.chapter_id, r)
+      }
+    }
+  }
+  const difficult = new Map<number, number>()
+  const dueCards = new Map<number, number>()
+  for (const f of flashcards) {
+    if (!ids.has(f.chapterId)) continue
+    const s = srsByCard.get(f.id) ?? null
+    const t = cardTier(s)
+    if (t === 'difficult') difficult.set(f.chapterId, (difficult.get(f.chapterId) ?? 0) + 1)
+    if (isCardDue(s, today)) dueCards.set(f.chapterId, (dueCards.get(f.chapterId) ?? 0) + 1)
+  }
+
+  const mastery = computeLevelMastery(level, chapters, progress, perfByQ, srsByCard, flashcards, today)
+  const byChapter = new Map<number, RevisionAreaDetails>()
+  for (const st of mastery.chapters) {
+    if (st.status === 'new') continue
+    const recent = recentRows.get(st.chapterId)
+    const recentAccuracy = recent && recent.total >= 3 ? recent.correct / recent.total : null
+    byChapter.set(st.chapterId, {
+      chapterId: st.chapterId,
+      status: st.status,
+      overall: st.overall,
+      accuracy: st.accuracy,
+      mistakes: mistakes.get(st.chapterId) ?? 0,
+      weakQs: weakQs.get(st.chapterId) ?? 0,
+      difficultCards: difficult.get(st.chapterId) ?? 0,
+      dueCards: dueCards.get(st.chapterId) ?? 0,
+      recentAccuracy,
+      improving: recentAccuracy !== null && recentAccuracy >= 0.6,
+    })
+  }
+
+  const needing = [...byChapter.values()]
+    .filter((d) => d.status === 'weak' || d.status === 'revision')
+    .sort((a, b) => (a.overall ?? 1) - (b.overall ?? 1))
+  const weakest = needing[0] ?? null
+  const needsRevision = needing.filter((d) => d !== weakest)
+  const improving = [...byChapter.values()]
+    .filter((d) => d.improving)
+    .sort((a, b) => (b.recentAccuracy ?? 0) - (a.recentAccuracy ?? 0))
+
+  return { byChapter, weakest, needsRevision, improving }
 }
 
 // ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ import { Confetti } from '../components/Confetti'
 import { impactLight, notificationSuccess } from '../lib/haptics'
 import { color, border, shadow, font } from '../theme'
 
-export type QuizMode = 'chapter' | 'chapter_test' | 'weak' | 'mistakes' | 'timed' | 'practice'
+export type QuizMode = 'chapter' | 'chapter_test' | 'weak' | 'mistakes' | 'timed' | 'practice' | 'revision'
 export type DifficultyFilter = 'all' | 'easy' | 'medium' | 'hard'
 
 interface QuizOverlayProps {
@@ -52,7 +52,7 @@ export function QuizOverlay({ chapterId, pool, mode = 'chapter', difficulty = 'a
   const activePool = retryPool ?? filteredPool
 
   const quizLength = useMemo(() => {
-    if (mode === 'chapter_test') return Math.max(activePool.length, 1)
+    if (mode === 'chapter_test' || mode === 'revision') return Math.max(activePool.length, 1)
     if (mode === 'weak' || mode === 'mistakes') return Math.min(20, Math.max(activePool.length, 1))
     return Math.min(QUIZ_LENGTH, Math.max(activePool.length, 1))
   }, [activePool.length, mode])
@@ -232,7 +232,7 @@ export function QuizOverlay({ chapterId, pool, mode = 'chapter', difficulty = 'a
               {mode === 'chapter' && !passed ? ` · need ${passMarkFor(total)}/${total} to pass` : ''}
             </div>
             <div style={{ color: color.secondary, fontSize: 13, marginTop: 4, fontWeight: 700 }}>
-              {score > 0 ? `+${score * (mode === 'weak' || mode === 'mistakes' ? XP.weakCorrect : XP.correctAnswer)} XP from correct answers` : ''}
+              {score > 0 ? `+${score * (mode === 'weak' || mode === 'mistakes' || mode === 'revision' ? XP.weakCorrect : XP.correctAnswer)} XP from correct answers` : ''}
             </div>
 
             {/* Wrong-question recovery */}

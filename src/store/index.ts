@@ -25,7 +25,7 @@ import type { DailyPlan, MasterySummary } from '../lib/mastery'
 
 export type ThemeMode = ThemeId
 
-export type QuizMode = 'chapter' | 'chapter_test' | 'weak' | 'mistakes' | 'timed' | 'practice' | 'paper' | 'mock' | 'grand'
+export type QuizMode = 'chapter' | 'chapter_test' | 'weak' | 'mistakes' | 'timed' | 'practice' | 'revision' | 'paper' | 'mock' | 'grand'
 
 export interface QuizResultInput {
   chapterId: number | null
@@ -272,7 +272,7 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const correctCount = attempts.filter((a) => a.correct).length
       const today = todayStr()
-      const revisionMode = mode === 'weak' || mode === 'mistakes'
+      const revisionMode = mode === 'weak' || mode === 'mistakes' || mode === 'revision'
       const qidToChapter = new Map<string, number>()
       allQuestions.forEach((q) => qidToChapter.set(q.id, q.chapterId))
 
@@ -309,7 +309,10 @@ export const useStore = create<AppState>((set, get) => ({
       daily.questions = Math.round(daily.questions)
       daily.minutes = Math.round(daily.minutes)
       await saveDailyStats(daily)
-      set({ daily })
+      // Critical: write the new question rolls back to the store, or every
+      // mastery/difficulty/weak computation keeps reading stale pre-session
+      // data until a reload.
+      set({ daily, qp })
       await recordQuizSession({ mode, chapter_id: chapterId, score, total, seconds: seconds ?? 0 })
       await bumpCumulative(get, set, isTest ? 'cum_tests' : 'cum_quizzes', 1)
       if (revisionMode) await bumpCumulative(get, set, 'cum_revisions', 1)
