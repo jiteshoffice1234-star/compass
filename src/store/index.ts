@@ -11,6 +11,7 @@ import {
   getAllQuestionPerf, saveQuestionPerf, getAllFlashcardSrs, saveFlashcardSrs,
   recordQuizSession, getDailyStats, saveDailyStats,
   getMilestones, unlockMilestone, getAllPersonalBests, savePersonalBest,
+  clearMockResults, clearRevisionFlags, saveActiveMock,
 } from '../lib/store'
 import type { ChapterProgressRow, QuestionPerfRow, FlashcardSrsRow, DailyStatsRow, PersonalBestRow } from '../lib/db'
 import { BADGES, WEEKLY_CHALLENGES, getChallengeForWeek, weekNumber, levelForXp } from '../lib/levels'
@@ -362,6 +363,14 @@ export const useStore = create<AppState>((set, get) => ({
         await maybeCompleteChapter(get, set, chapterId ?? 0)
       }
 
+      // Phase 4: every completed mock earns a completion bonus (on top of the
+      // per-correct-answer XP above). Full exams are the big milestones here.
+      if (mode === 'mock') {
+        xpGained += XP.mockComplete
+        await addXp(XP.mockComplete, 'mock_complete', null)
+        xpReasons.push('Mock completed')
+      }
+
       // ---- 4. Personal bests ----
       if (total > 0) {
         const pct = Math.round((score / total) * 100)
@@ -488,6 +497,9 @@ export const useStore = create<AppState>((set, get) => ({
       }
       await saveStreak({ id: 1, current_streak: 0, longest_streak: 0, last_active_date: null })
       await resetAllData()
+      await clearMockResults()
+      await clearRevisionFlags()
+      saveActiveMock(null)
       set({
         progress: {}, totalXp: 0, currentStreak: 0, longestStreak: 0, lastActiveDate: null,
         badges: {}, bookmarks: [], grandFinalDone: false, weeklyProgress: 0, weeklyCompleted: 0,

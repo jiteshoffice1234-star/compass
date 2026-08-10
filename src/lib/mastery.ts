@@ -33,6 +33,7 @@ export const XP = {
   quizPass: 20,            // first pass of a chapter quiz (legacy value kept)
   perfectBonus: 15,        // perfect chapter quiz (legacy value kept)
   chapterTestPass: 30,     // full chapter test passed
+  mockComplete: 25,        // every completed mock exam
   dailyGoal: 25,           // daily target reached (once/day)
   weeklyGoal: 50,          // weekly challenge completed (once/week)
   milestone: 40,           // each milestone (once)
@@ -916,13 +917,18 @@ export function computeTargetedSession(
   questions: Question[],
   flashcards: Flashcard[],
   today: string,
+  flags?: Set<string>,
 ): RevisionTarget {
   const chapter = chapterById(chapterId)
   const chapterQs = questions.filter((q) => q.chapterId === chapterId)
   const chapterCards = flashcards.filter((f) => f.chapterId === chapterId)
 
   const scoredQs = chapterQs
-    .map((q) => ({ q, s: revisionQuestionScore(perfByQ.get(q.id) ?? null, today) }))
+    .map((q) => {
+      let s = revisionQuestionScore(perfByQ.get(q.id) ?? null, today)
+      if (flags?.has(q.id)) s += 2 // manually flagged "add to revision" from mock review
+      return { q, s }
+    })
     .sort((a, b) => b.s - a.s)
   const scoredCards = chapterCards
     .map((c) => ({ c, s: cardRevisionPriority(srsByCard.get(c.id) ?? null, today) }))

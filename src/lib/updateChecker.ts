@@ -2,7 +2,7 @@
 export const REPO = 'jiteshoffice1234-star/compass'
 
 // Injected at build time from package.json via vite define.
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.2.0'
+export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.3.0'
 
 export interface UpdateInfo {
   available: boolean

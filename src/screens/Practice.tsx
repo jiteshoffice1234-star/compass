@@ -13,6 +13,8 @@ import { Glossary } from './Glossary'
 import { StageTestOverlay } from './StageTestOverlay'
 import { QuizOverlay, QuizMode, DifficultyFilter } from '../components/QuizOverlay'
 import { PracticeSession, SessionConfig } from '../components/PracticeSession'
+import { getMockResults } from '../lib/store'
+import { MockResultRow } from '../lib/db'
 import { computeRevisionData, computeLevelMastery, todayStr, Status } from '../lib/mastery'
 import { EXAM_TERMS, FOUNDATION_MCQ_BANK, hasPastPapers, pastPaperUrl } from '../data/pastPapers'
 import { color, border, shadow } from '../theme'
@@ -36,6 +38,8 @@ export function Practice() {
   const [setupCount, setSetupCount] = useState<number>(100)
   const [setupTimed, setSetupTimed] = useState<boolean>(true)
   const [setupMinutes, setSetupMinutes] = useState<number>(120)
+  const [setupMode, setSetupMode] = useState<'full' | 'practice' | 'weak'>('full')
+  const [mockRows, setMockRows] = useState<MockResultRow[]>([])
 
   const level = useStore((s) => s.level)
   const progress = useStore((s) => s.progress)
@@ -103,10 +107,18 @@ export function Practice() {
       termId: setupTermId,
       count: setupCount,
       timed: setupTimed,
-      minutes: setupTimed ? setupMinutes : 0
+      minutes: setupTimed ? setupMinutes : 0,
+      mode: setupMode,
     })
     setSheet('none')
   }
+
+  // Mock stats (Last / Best / Count) — refreshed every time Practice mounts.
+  useEffect(() => {
+    getMockResults(50).then(setMockRows).catch(() => {})
+  }, [])
+  const lastMockPct = mockRows.length > 0 && mockRows[0].total > 0 ? Math.round((mockRows[0].score / mockRows[0].total) * 100) : null
+  const bestMockPct = mockRows.reduce((m, r) => (r.total > 0 ? Math.max(m, Math.round((r.score / r.total) * 100)) : m), 0)
 
   const openOfficialPaper = () => {
     if (level === 'foundation') {
@@ -212,6 +224,7 @@ export function Practice() {
           )}
         </Card>
 
+        {/* ===== MOCK EXAMS (Phase 4) ===== */}
         <Card style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12, background: color.primaryTint, border: border.thick }} onClick={() => setSheet('setup')}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ width: 48, height: 48, borderRadius: 12, background: color.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: border.thin }}>
@@ -221,11 +234,27 @@ export function Practice() {
           </div>
           <div>
             <div style={{ fontWeight: 900, fontSize: 22, marginTop: 4 }}>Practice Exam</div>
-            <div style={{ color: color.text, fontSize: 14, marginTop: 4, fontWeight: 600, opacity: 0.8 }}>Full-length timed sessions (100 Qs). Select subjects, simulate real exams, and review answers.</div>
+            <div style={{ color: color.text, fontSize: 14, marginTop: 4, fontWeight: 600, opacity: 0.8 }}>Full-length timed sessions. Select subjects, simulate real exams, and get a full analysis.</div>
           </div>
-          <Button variant="primary" style={{ marginTop: 8, width: '100%', display: 'flex', justifyContent: 'center', gap: 8 }}>
-            <Settings2 size={18} /> Configure & Start
-          </Button>
+          {mockRows.length === 0 ? (
+            <div style={{ background: color.card, border: border.thin, borderRadius: 10, padding: '10px 12px', fontSize: 12.5, fontWeight: 700, color: color.text }}>
+              🎯 Take your first mock exam — you'll get score, chapter-wise analysis, time insights and revision recommendations.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              <MiniStat icon={<Layers size={13} color={color.primary} />} label="Mocks" value={`${mockRows.length}`} />
+              <MiniStat icon={<Target size={13} color={color.success} />} label="Best" value={bestMockPct > 0 ? `${bestMockPct}%` : '—'} />
+              <MiniStat icon={<RefreshCw size={13} color={color.warning} />} label="Last" value={lastMockPct !== null ? `${lastMockPct}%` : '—'} />
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <Button variant="primary" style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 8 }}>
+              <Settings2 size={18} /> Configure & Start
+            </Button>
+            <div onClick={(e) => { e.stopPropagation(); nav('/mocks') }} role="button" style={{ background: color.card, border: border.thin, borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', fontWeight: 800, fontSize: 13 }}>
+              History
+            </div>
+          </div>
         </Card>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -277,7 +306,16 @@ export function Practice() {
 
       <BottomSheet open={sheet === 'setup'} onClose={() => setSheet('none')} title="Configure Exam">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '0 4px 16px' }}>
-          
+
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>Mock type</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <ModeRow active={setupMode === 'full'} title="Full Mock" desc="Complete paper simulation — timed, exam rules, no feedback until submission" onClick={() => setSetupMode('full')} />
+              <ModeRow active={setupMode === 'practice'} title="Practice Mock" desc="Same exam format but a lighter timed experience" onClick={() => setSetupMode('practice')} />
+              <ModeRow active={setupMode === 'weak'} title="Weak-Area Mock" desc="Exam built from your weakest chapters (from your real performance)" onClick={() => setSetupMode('weak')} />
+            </div>
+          </div>
+
           <div>
             <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>Subject</div>
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>

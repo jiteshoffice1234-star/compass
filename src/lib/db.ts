@@ -100,6 +100,35 @@ export interface UserProfileRow {
   daily_minutes_goal: number
 }
 
+// Phase 4: mock exam attempt + result payloads
+// One MockAttempt per question in the mock: chosen option, correctness, time
+// spent and whether it was marked for review. Stored once per completed mock
+// so history can replay the full analysis without re-recording anything.
+export interface MockAttempt {
+  q: string          // question id
+  chosen: number | null // selected option index, null = unanswered
+  correct: boolean
+  seconds: number | null // time spent on this question (null = untracked)
+  chapterId: number
+  marked: boolean
+}
+
+export interface MockResultRow {
+  id: number
+  mode: string          // 'full' | 'practice' | 'weak'
+  paperId: number | null
+  level: string
+  count: number
+  score: number
+  total: number
+  seconds: number       // total duration used
+  unanswered: number
+  marked: number
+  autoSubmit: number    // 1 = submitted when time expired
+  completedAt: string
+  data: string          // JSON: { poolIds, answers, marked[], perQSeconds, autoSubmit, startedAt, deadline }
+}
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS user_profile (
   id INTEGER PRIMARY KEY DEFAULT 1,
@@ -210,6 +239,27 @@ CREATE TABLE IF NOT EXISTS personal_bests (
   key TEXT PRIMARY KEY,
   value REAL DEFAULT 0,
   achieved_at TEXT
+);
+-- Phase 4: mock exam results (history + replay payloads)
+CREATE TABLE IF NOT EXISTS mock_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mode TEXT,
+  paper_id INTEGER,
+  level TEXT,
+  count INTEGER DEFAULT 0,
+  score INTEGER DEFAULT 0,
+  total INTEGER DEFAULT 0,
+  seconds INTEGER DEFAULT 0,
+  unanswered INTEGER DEFAULT 0,
+  marked INTEGER DEFAULT 0,
+  auto_submit INTEGER DEFAULT 0,
+  completed_at TEXT DEFAULT (datetime('now')),
+  data TEXT
+);
+-- Phase 4: manually flagged "add to revision" questions
+CREATE TABLE IF NOT EXISTS revision_flags (
+  question_id TEXT PRIMARY KEY,
+  created_at TEXT DEFAULT (datetime('now'))
 );
 `
 

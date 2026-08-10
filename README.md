@@ -70,6 +70,16 @@ CMA students in India face a fragmented study experience:
 - **Offline study material** — all 23 official ICMAI books (Foundation, Intermediate, Final) bundled inside the app — read every book with zero internet
 
 ### Practice Hub
+- **Mock Exams (V2.3)** — a realistic, exam-rules simulation with three modes:
+  - **Full Mock** — complete paper-length exam with countdown timer, question palette (jump anywhere, see answered/marked/unanswered), **Mark for review**, **Clear answer**, submit confirmation with an unanswered-questions warning, and **auto-submit when time expires**
+  - **Practice Mock** — the same exam format, lighter timed experience
+  - **Weak-Area Mock** — an exam built from your weakest chapters (from the Mastery Engine, real performance)
+  - Questions are drawn **balanced across chapters** (no single chapter dominating an uneven paper), with a deterministic-but-randomised fair mix; the pool is **frozen at start** so mastery updates mid-exam never reshuffle your answers
+  - **No feedback until submission** — results only after you submit
+  - **Timestamp-based timer** — accurate even when the app is throttled, survives reloads, and **in-progress mocks auto-save and resume** from where you left off (including remaining time)
+  - **Post-exam analysis**: score/percentage, correct / wrong / unanswered, accuracy, time taken, avg time per question, chapter-wise performance (🟢🟡🔴⚪ with per-chapter accuracy), time analysis (slowest questions + “you spent X% on one chapter” warnings), a **Recommended Next Step** that launches the existing Smart Revision for your weakest chapter, and **Answer Review** with per-question time + **ADD TO REVISION**
+  - **Mock History** (`/mocks`) — every exam stored locally with date, paper, score, accuracy, time; opening one replays the full analysis; a score **trend** appears once you have 2+ mocks (never before)
+  - Results feed the existing Mastery Engine (rolls, chapter/paper mastery, weak areas, revision priority) — no separate intelligence; only **answered** questions count as attempts
 - **Mastery Map (V2.1)** — per-paper mastery bars plus your top **Weakest Areas** (lowest mastery first) and **Strongest Areas**, each tappable straight into the chapter
 - **Smart Quiz (V2)** — the engine builds your session from real performance: weak questions, previous mistakes, timed or mixed practice, with optional difficulty focus
 - **Revision hub (V2.2)** — a **Highest Priority** hero (the engine's single weakest started area with mastery %, accuracy, repeated-mistake/difficult-card reasons and an estimated session size) with **START REVISION** plus Quick / Deep / Wrong answers / Difficult-cards mode chips, then Needs Revision, Improving, quick-access due/difficult/wrong counters, and a local revision history

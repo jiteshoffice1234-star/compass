@@ -12,6 +12,7 @@ import {
   PersonalBestRow,
   WeeklyChallengeRow,
   UserProfileRow,
+  MockResultRow,
   initDatabase,
 } from './db'
 
@@ -528,6 +529,142 @@ export async function getRecentQuizSessions(limit = 30): Promise<QuizSessionRow[
     logDatabaseError({ operation: 'getRecentQuizSessions', severity: 'WARNING', message: String(error) })
     return []
   }
+}
+
+// ---------- Phase 4: mock exam results ----------
+export async function saveMockResult(r: Omit<MockResultRow, 'id' | 'completedAt'>): Promise<number> {
+  if (!isNative) {
+    const list = lsGet<MockResultRow[]>('mocks', [])
+    const id = (list[list.length - 1]?.id ?? 0) + 1
+    const row: MockResultRow = { ...r, id, completedAt: new Date().toISOString() }
+    list.push(row)
+    lsSet('mocks', list.slice(-100))
+    return id
+  }
+  try {
+    const db = getDb()
+    const res = await db.run(
+      'INSERT INTO mock_results (mode, paper_id, level, count, score, total, seconds, unanswered, marked, auto_submit, data) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+      [r.mode, r.paperId, r.level, r.count, r.score, r.total, r.seconds, r.unanswered, r.marked, r.autoSubmit, r.data],
+    )
+    return res.changes?.lastId ?? 0
+  } catch (error) {
+    logDatabaseError({ operation: 'saveMockResult', severity: 'WARNING', message: String(error) })
+    return 0
+  }
+}
+
+export async function getMockResults(limit = 50): Promise<MockResultRow[]> {
+  if (!isNative) {
+    return lsGet<MockResultRow[]>('mocks', []).slice(-limit).reverse()
+  }
+  try {
+    const db = getDb()
+    const r = await db.query(
+      'SELECT id, mode, paper_id as paperId, level, count, score, total, seconds, unanswered, marked, auto_submit as autoSubmit, completed_at as completedAt, data FROM mock_results ORDER BY id DESC LIMIT ?',
+      [limit],
+    )
+    return (r.values as MockResultRow[]) ?? []
+  } catch (error) {
+    logDatabaseError({ operation: 'getMockResults', severity: 'WARNING', message: String(error) })
+    return []
+  }
+}
+
+export async function getMockResult(id: number): Promise<MockResultRow | null> {
+  if (!isNative) {
+    return lsGet<MockResultRow[]>('mocks', []).find((m) => m.id === id) ?? null
+  }
+  try {
+    const db = getDb()
+    const r = await db.query(
+      'SELECT id, mode, paper_id as paperId, level, count, score, total, seconds, unanswered, marked, auto_submit as autoSubmit, completed_at as completedAt, data FROM mock_results WHERE id = ?',
+      [id],
+    )
+    return (r.values?.[0] as MockResultRow) ?? null
+  } catch (error) {
+    logDatabaseError({ operation: 'getMockResult', severity: 'WARNING', message: String(error) })
+    return null
+  }
+}
+
+export async function clearMockResults(): Promise<void> {
+  if (!isNative) {
+    lsSet('mocks', [])
+    return
+  }
+  try {
+    await getDb().run('DELETE FROM mock_results')
+  } catch (error) {
+    logDatabaseError({ operation: 'clearMockResults', severity: 'WARNING', message: String(error) })
+  }
+}
+
+// ---------- Phase 4: revision flags (manual "add to revision") ----------
+export async function getRevisionFlags(): Promise<string[]> {
+  if (!isNative) return lsGet<string[]>('revflags', [])
+  try {
+    const db = getDb()
+    const r = await db.query('SELECT question_id FROM revision_flags')
+    return (r.values ?? []).map((v: any) => v.question_id)
+  } catch (error) {
+    logDatabaseError({ operation: 'getRevisionFlags', severity: 'WARNING', message: String(error) })
+    return []
+  }
+}
+
+export async function setRevisionFlag(questionId: string, on: boolean): Promise<void> {
+  if (!isNative) {
+    const list = new Set(lsGet<string[]>('revflags', []))
+    if (on) list.add(questionId)
+    else list.delete(questionId)
+    lsSet('revflags', [...list])
+    return
+  }
+  try {
+    const db = getDb()
+    if (on) await db.run('INSERT OR IGNORE INTO revision_flags (question_id) VALUES (?)', [questionId])
+    else await db.run('DELETE FROM revision_flags WHERE question_id = ?', [questionId])
+  } catch (error) {
+    logDatabaseError({ operation: 'setRevisionFlag', severity: 'WARNING', message: String(error) })
+  }
+}
+
+export async function clearRevisionFlags(): Promise<void> {
+  if (!isNative) {
+    lsSet('revflags', [])
+    return
+  }
+  try {
+    await getDb().run('DELETE FROM revision_flags')
+  } catch (error) {
+    logDatabaseError({ operation: 'clearRevisionFlags', severity: 'WARNING', message: String(error) })
+  }
+}
+
+// ---------- Phase 4: active mock state (survives app reload) ----------
+// Stored in localStorage (works in the WebView on both platforms) so a reload
+// mid-exam can resume with the exact answers, marks, timings and deadline.
+export interface ActiveMockState {
+  config: { level: string; paperId: number | null; mode: string; count: number; timed: boolean; minutes: number }
+  poolIds: string[]
+  answers: (number | null)[]
+  marked: boolean[]
+  perQSeconds: number[]
+  startedAt: number
+  deadline: number
+}
+
+export function saveActiveMock(state: ActiveMockState | null): void {
+  if (!state) {
+    try { localStorage.removeItem(LS_PREFIX + 'active_mock') } catch { /* noop */ }
+    return
+  }
+  lsSet('active_mock', state)
+}
+
+export function getActiveMock(): ActiveMockState | null {
+  return lsGet<ActiveMockState | null>('active_mock', null)
 }
 
 // ---------- V2: daily stats ----------
